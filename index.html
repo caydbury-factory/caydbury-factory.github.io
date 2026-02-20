@@ -679,7 +679,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
     </div>
 
     <div class="modal-footer">
-      <button id="goalSaveBtn" onclick="saveGoal()">Save</button>
+      <button type="button" id="goalSaveBtn">Save</button>
       <button class="cancel" onclick="closeGoalModal()">Cancel</button>
     </div>
   </div>
@@ -777,7 +777,10 @@ async function loadFromCloud(){
     if(Array.isArray(data.sessions)) sessions = data.sessions;
     if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
 
-    if(Array.isArray(data.goals)) goals = data.goals;
+    if(Array.isArray(data.goals) && data.goals.length){
+      goals = data.goals;
+    }
+    
     if(Array.isArray(data.proItems)) proItems = data.proItems;
     if(Array.isArray(data.activity)) activity = data.activity;
     if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
@@ -1140,7 +1143,11 @@ function syncGoalTypeUI(){
   }
 }
 
-function saveGoal(){
+function saveGoal(e){
+  if (e && e.preventDefault) e.preventDefault();
+  console.log("EditingGoalId at save:", editingGoalId);
+  console.log("SAVE GOAL FIRED");
+    
   const name = document.getElementById("goalName").value.trim();
   const type = document.getElementById("goalType").value;
   const notes = document.getElementById("goalNotes").value.trim();
@@ -1157,7 +1164,7 @@ function saveGoal(){
     ? (targetWords ? `${targetWords.toLocaleString()} words` : "no word target yet")
     : (targetDate ? `by ${targetDate}` : "no date target yet");
 
-  if(editingGoalId){
+  if(editingGoalId && typeof editingGoalId === "string"){
     const idx = goals.findIndex(g=>g.id===editingGoalId);
     if(idx >= 0){
       const prev = goals[idx];
@@ -1185,6 +1192,7 @@ function saveGoal(){
       updatedAt: now
     };
     goals.unshift(g);
+    console.log("GOALS AFTER PUSH:", goals);
 
     addActivity({
       type:"Goal Created",
@@ -1238,12 +1246,19 @@ function deleteGoal(goalId){
 }
 
 function renderGoals(){
+  console.log("GOALS ARRAY:", goals);
+
   const list = document.getElementById("goalsList");
   const empty = document.getElementById("goalsEmpty");
-  const filter = document.getElementById("goalFilter").value;
+  const filterSelect = document.getElementById("goalFilter");
+
+  console.log("goalFilter element:", filterSelect);
+
+  const filter = filterSelect ? filterSelect.value : "all";
 
   const activeGoal = goals.find(g=>g.active);
-  document.getElementById("activeGoalPill").textContent = `Active: ${activeGoal ? activeGoal.name : "—"}`;
+  document.getElementById("activeGoalPill").textContent =
+    `Active: ${activeGoal ? activeGoal.name : "—"}`;
 
   let visible = goals.slice();
   if(filter === "active"){
@@ -1262,9 +1277,11 @@ function renderGoals(){
       ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
       : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
     const noteLine = g.notes ? ` · ${g.notes}` : "";
+
     return `
       <div class="goal-item">
-        <button class="goal-toggle" aria-label="Toggle active goal" aria-pressed="${g.active ? "true":"false"}"
+        <button class="goal-toggle"
+          aria-pressed="${g.active ? "true":"false"}"
           onclick="setActiveGoal('${g.id}')">
           ${g.active ? "■" : "□"}
         </button>
@@ -1275,8 +1292,10 @@ function renderGoals(){
         </div>
 
         <div class="goal-actions">
-          <button class="small-link" onclick="openGoalModal('${g.id}')" aria-label="Edit goal">Edit</button>
-          <button class="small-link" onclick="deleteGoal('${g.id}')" aria-label="Delete goal">Delete</button>
+          <button class="small-link"
+            onclick="openGoalModal('${g.id}')">Edit</button>
+          <button class="small-link"
+            onclick="deleteGoal('${g.id}')">Delete</button>
         </div>
       </div>
     `;
@@ -1553,6 +1572,14 @@ function loadAll(){
 /* =========================
    Boot
 ========================= */
+// Bind goal save button safely (Google Sites compatible)
+document.addEventListener("DOMContentLoaded", function(){
+  const btn = document.getElementById("goalSaveBtn");
+  if(btn){
+    btn.addEventListener("click", () => saveGoal());
+  }
+});
+  
 (async function boot(){
   // Start from local cache first so legacy/partial cloud payloads cannot erase newer fields.
   loadAll();
