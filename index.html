@@ -544,32 +544,9 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
 
             <!-- Procrastination Station tab -->
             <div id="panelPro" role="tabpanel" aria-labelledby="tabPro" hidden>
-              <div class="row">
-                <div class="field">
-                  <label for="proTitle">Title</label>
-                  <input id="proTitle" placeholder="Playlist for Chapter 7, article on pacing, etc.">
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="field">
-                  <label for="proUrl">Link (optional)</label>
-                  <input id="proUrl" placeholder="https://...">
-                </div>
-              </div>
-
-              <div class="row">
-                <div class="field">
-                  <label for="proNote">Note</label>
-                  <textarea id="proNote" placeholder="Why this matters / where I found it / what it sparked..."></textarea>
-                </div>
-              </div>
-
-              <div class="row" style="justify-content:flex-end">
-                <button class="btn-mini" onclick="saveProcrastinationItem()">Save</button>
-              </div>
-
-              <div class="hr"></div>
+              <p style="margin:0 0 12px; color:var(--muted); font-style:italic;">
+                Saved links and notes appear here.
+              </p>
 
               <div class="list" id="proList" aria-label="Saved procrastination items"></div>
               <div id="proEmpty" style="display:none; color:var(--muted); font-style:italic; padding:8px 2px;">
@@ -716,6 +693,39 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
     <div class="modal-footer">
       <button onclick="saveManualNote()">Save</button>
       <button class="cancel" onclick="closeNoteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW MODAL: add procrastination link/note -->
+<div class="modal" id="proModal" role="dialog" aria-modal="true" aria-label="Add procrastination item">
+  <div class="modal-content">
+    <h3>Add Link / Note</h3>
+
+    <div class="row">
+      <div class="field">
+        <label for="proTitle">Title</label>
+        <input id="proTitle" placeholder="Playlist for Chapter 7, article on pacing, etc.">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="proUrl">Link (optional)</label>
+        <input id="proUrl" placeholder="https://...">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="proNote">Note</label>
+        <textarea id="proNote" placeholder="Why this matters / where I found it / what it sparked..."></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button onclick="saveProcrastinationItem()">Save</button>
+      <button class="cancel" onclick="closeProModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -1052,10 +1062,7 @@ function switchWorkspaceTab(which){
     panelGoals.hidden = true;
     panelPro.hidden = false;
     btn.textContent = "+ Add Link/Note";
-    btn.onclick = () => {
-      // focus first field in procrastination form
-      document.getElementById("proTitle").focus();
-    };
+    btn.onclick = openProModal;
   }
 }
 
@@ -1288,9 +1295,19 @@ function saveProcrastinationItem(){
   document.getElementById("proTitle").value="";
   document.getElementById("proUrl").value="";
   document.getElementById("proNote").value="";
+  closeProModal();
 
   renderProItems();
   persistAll();
+}
+
+function openProModal(){
+  document.getElementById("proModal").style.display = "flex";
+  document.getElementById("proTitle").focus();
+}
+
+function closeProModal(){
+  document.getElementById("proModal").style.display = "none";
 }
 
 function deleteProItem(id){
@@ -1317,21 +1334,24 @@ function renderProItems(){
   empty.style.display = "none";
 
   list.innerHTML = proItems.map(p=>{
+    const isAuthor = document.body.classList.contains("edit-mode");
+    const cardGrid = isAuthor ? "1fr auto" : "1fr";
     const link = p.url
       ? `<div class="sub"><a href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--deep)">${escapeHtml(p.url)}</a></div>`
       : "";
     const note = p.note ? `<div class="sub" style="margin-top:6px">${escapeHtml(p.note)}</div>` : "";
+    const controls = isAuthor
+      ? `<div class="goal-actions"><button class="small-link" onclick="deleteProItem('${p.id}')">Delete</button></div>`
+      : "";
     return `
-      <div class="goal-item" style="grid-template-columns: 1fr auto;">
+      <div class="goal-item" style="grid-template-columns: ${cardGrid};">
         <div class="goal-meta">
           <div class="name">${escapeHtml(p.title)}</div>
           ${link}
           ${note}
           <div class="sub" style="margin-top:8px; color:var(--muted)">Saved: ${escapeHtml(fmtTime(p.createdAt))}</div>
         </div>
-        <div class="goal-actions">
-          <button class="small-link" onclick="deleteProItem('${p.id}')">Delete</button>
-        </div>
+        ${controls}
       </div>
     `;
   }).join("");
