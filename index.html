@@ -1433,7 +1433,9 @@ function persistAll(){
   if (document.body.classList.contains('edit-mode')) {
     fetch(SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Keep this request "simple" for Google Apps Script CORS compatibility.
+      // Setting application/json forces a preflight that Apps Script web apps
+      // often reject, causing cloud saves to silently fail.
       body: JSON.stringify(payload)
     }).catch(()=>console.log('Cloud save failed.'));
   }
