@@ -1,0 +1,7 @@
+# Keep HTML line endings consistent with current repository format
+*.html text eol=crlf
+
+# Normalize common text assets
+*.md text eol=lf
+*.css text eol=lf
+*.js text eol=lf
