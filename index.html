@@ -774,8 +774,19 @@ async function loadFromCloud(){
     if(Array.isArray(data.activity)) activity = data.activity;
     if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
 
-    // local backup sync
-    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    // Local backup sync: persist normalized in-memory shape, not raw cloud payload.
+    // This prevents accidental loss when cloud responses omit newer keys (e.g. goals/activity).
+    const normalized = {
+      v: 2,
+      state,
+      sessions,
+      selectedIndex,
+      goals,
+      proItems,
+      activity,
+      workspaceTab
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(normalized));
 
     return true;
   }catch(e){
@@ -1181,6 +1192,7 @@ function saveGoal(){
   closeGoalModal();
   renderGoals();
   persistAll();
+  console.info(`[Goals] Saved goal "${name}" (${type}).`);
 }
 
 function setActiveGoal(goalId){
@@ -1453,14 +1465,24 @@ function persistAll(){
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
 
   // Cloud save only when author is in edit mode
-  if (document.body.classList.contains('edit-mode')) {
+  if (isEditMode()) {
     fetch(SCRIPT_URL, {
       method: 'POST',
       // Keep this request "simple" for Google Apps Script CORS compatibility.
       // Setting application/json forces a preflight that Apps Script web apps
       // often reject, causing cloud saves to silently fail.
       body: JSON.stringify(payload)
-    }).catch(()=>console.log('Cloud save failed.'));
+    })
+    .then(res => {
+      if(!res.ok){
+        console.warn(`[Cloud Save] Failed with status ${res.status}.`);
+      }else{
+        console.info('[Cloud Save] Synced successfully.');
+      }
+    })
+    .catch(()=>console.warn('[Cloud Save] Network error; local copy is still saved.'));
+  }else{
+    console.info('[Local Save] Saved locally only. Use ?mode=edit to sync to cloud.');
   }
 }
 
@@ -1524,10 +1546,9 @@ function loadAll(){
    Boot
 ========================= */
 (async function boot(){
-  const ok = await loadFromCloud();
-  if(!ok){
-    loadAll();
-  }
+  // Start from local cache first so legacy/partial cloud payloads cannot erase newer fields.
+  loadAll();
+  await loadFromCloud();
   refreshUI();
 
    // Ensure we always have at most one active goal (in case of old data)
