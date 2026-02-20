@@ -515,7 +515,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
             </div>
 
             <div class="row" style="justify-content:flex-end">
-              <button class="btn-mini author-only" id="primaryActionBtn" onclick="openGoalModal()">+ Add New</button>
+              <button class="btn-mini" id="primaryActionBtn" onclick="openGoalModal()">+ Add New</button>
             </div>
           </div>
 
@@ -753,6 +753,14 @@ if (mode === 'edit') {
 
 let hasLocalMutations = false;
 
+function isEditMode(){
+  return document.body.classList.contains('edit-mode');
+}
+
+function hasLocalSnapshot(){
+  return !!localStorage.getItem(LS_KEY);
+}
+
 async function loadFromCloud(){
   try{
     const response = await fetch(SCRIPT_URL);
@@ -777,8 +785,19 @@ async function loadFromCloud(){
     if(Array.isArray(data.activity)) activity = data.activity;
     if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
 
-    // local backup sync
-    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    // Local backup sync: persist normalized in-memory shape, not raw cloud payload.
+    // This prevents accidental loss when cloud responses omit newer keys (e.g. goals/activity).
+    const normalized = {
+      v: 2,
+      state,
+      sessions,
+      selectedIndex,
+      goals,
+      proItems,
+      activity,
+      workspaceTab
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(normalized));
 
     return true;
   }catch(e){
@@ -1189,6 +1208,7 @@ function saveGoal(e){
   closeGoalModal();
   renderGoals();
   persistAll();
+  console.info(`[Goals] Saved goal "${name}" (${type}).`);
 }
 
 function setActiveGoal(goalId){
@@ -1254,13 +1274,8 @@ function renderGoals(){
 
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
-      ? (g.targetWords
-          ? `Target: ${Number(g.targetWords).toLocaleString()} words`
-          : "Target: not set")
-      : (g.targetDate
-          ? `Target: ${g.targetDate}`
-          : "Target: not set");
-
+      ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
+      : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
     const noteLine = g.notes ? ` · ${g.notes}` : "";
 
     return `
@@ -1477,14 +1492,24 @@ function persistAll(){
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
 
   // Cloud save only when author is in edit mode
-  if (document.body.classList.contains('edit-mode')) {
+  if (isEditMode()) {
     fetch(SCRIPT_URL, {
-      method: "POST",
-      mode: "no-cors",
-      body: JSON.stringify(payload),
+      method: 'POST',
+      // Keep this request "simple" for Google Apps Script CORS compatibility.
+      // Setting application/json forces a preflight that Apps Script web apps
+      // often reject, causing cloud saves to silently fail.
+      body: JSON.stringify(payload)
     })
-    .then(() => console.log("Cloud save sent."))
-    .catch(err => console.error("Cloud save failed:", err));
+    .then(res => {
+      if(!res.ok){
+        console.warn(`[Cloud Save] Failed with status ${res.status}.`);
+      }else{
+        console.info('[Cloud Save] Synced successfully.');
+      }
+    })
+    .catch(()=>console.warn('[Cloud Save] Network error; local copy is still saved.'));
+  }else{
+    console.info('[Local Save] Saved locally only. Use ?mode=edit to sync to cloud.');
   }
 }
 
@@ -1556,10 +1581,15 @@ document.addEventListener("DOMContentLoaded", function(){
 });
   
 (async function boot(){
-  const ok = await loadFromCloud();
-  if(!ok){
-    loadAll();
+  // Start from local cache first so legacy/partial cloud payloads cannot erase newer fields.
+  loadAll();
+
+  // In view mode, keep an existing local snapshot (user-entered goals/notes) instead of
+  // replacing it with cloud defaults on every load. In edit mode we always sync cloud.
+  if (isEditMode() || !hasLocalSnapshot()) {
+    await loadFromCloud();
   }
+
   refreshUI();
 
    // Ensure we always have at most one active goal (in case of old data)
