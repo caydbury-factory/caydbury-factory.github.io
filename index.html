@@ -769,7 +769,10 @@ async function loadFromCloud(){
     if(Array.isArray(data.sessions)) sessions = data.sessions;
     if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
 
-    if(Array.isArray(data.goals)) goals = data.goals;
+    if(Array.isArray(data.goals) && data.goals.length){
+      goals = data.goals;
+    }
+    
     if(Array.isArray(data.proItems)) proItems = data.proItems;
     if(Array.isArray(data.activity)) activity = data.activity;
     if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
