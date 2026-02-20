@@ -751,6 +751,12 @@ if (mode === 'edit') {
   document.body.classList.add('edit-mode');
 }
 
+let hasLocalMutations = false;
+
+function isEditMode(){
+  return document.body.classList.contains('edit-mode');
+}
+
 async function loadFromCloud(){
   try{
     const response = await fetch(SCRIPT_URL);
@@ -758,6 +764,10 @@ async function loadFromCloud(){
 
     // Only apply if it looks like saved data
     if(!data || typeof data !== 'object') return false;
+
+    // If user already changed local state while cloud was loading,
+    // never overwrite those in-page edits with stale remote data.
+    if (hasLocalMutations) return false;
 
     if(Array.isArray(data.state)) state = data.state;
     if(Array.isArray(data.sessions)) sessions = data.sessions;
@@ -1119,23 +1129,18 @@ function saveGoal(){
   const name = document.getElementById("goalName").value.trim();
   const type = document.getElementById("goalType").value;
   const notes = document.getElementById("goalNotes").value.trim();
-  const targetWords = parseInt(document.getElementById("goalTargetWords").value, 10);
+  const rawTargetWords = parseInt(document.getElementById("goalTargetWords").value, 10);
   const targetDate = document.getElementById("goalTargetDate").value;
+  const targetWords = Number.isFinite(rawTargetWords) && rawTargetWords > 0 ? rawTargetWords : null;
 
   if(!name){
     alert("Please give the goal a name.");
     return;
   }
-  if(type === "words" && (!Number.isFinite(targetWords) || targetWords <= 0)){
-    alert("Please enter a target word count.");
-    return;
-  }
-  if(type === "date" && !targetDate){
-    alert("Please choose a target date.");
-    return;
-  }
-
   const now = new Date().toISOString();
+  const targetLabel = type === "words"
+    ? (targetWords ? `${targetWords.toLocaleString()} words` : "no word target yet")
+    : (targetDate ? `by ${targetDate}` : "no date target yet");
 
   if(editingGoalId){
     const idx = goals.findIndex(g=>g.id===editingGoalId);
@@ -1145,12 +1150,12 @@ function saveGoal(){
         ...prev,
         name, type, notes,
         targetWords: type==="words" ? targetWords : null,
-        targetDate: type==="date" ? targetDate : null,
+        targetDate: type==="date" ? (targetDate || null) : null,
         updatedAt: now
       };
       addActivity({
         type:"Goal Edited",
-        text:`${name} (${type === "words" ? targetWords.toLocaleString()+" words" : "by "+targetDate})`,
+        text:`${name} (${targetLabel})`,
         system:true
       });
     }
@@ -1159,7 +1164,7 @@ function saveGoal(){
       id: uid("goal"),
       name, type, notes,
       targetWords: type==="words" ? targetWords : null,
-      targetDate: type==="date" ? targetDate : null,
+      targetDate: type==="date" ? (targetDate || null) : null,
       active: goals.length ? false : true, // first goal becomes active by default
       createdAt: now,
       updatedAt: now
@@ -1168,7 +1173,7 @@ function saveGoal(){
 
     addActivity({
       type:"Goal Created",
-      text:`${name} (${type === "words" ? targetWords.toLocaleString()+" words" : "by "+targetDate})`,
+      text:`${name} (${targetLabel})`,
       system:true
     });
 
@@ -1180,6 +1185,7 @@ function saveGoal(){
   closeGoalModal();
   renderGoals();
   persistAll();
+  console.info(`[Goals] Saved goal "${name}" (${type}).`);
 }
 
 function setActiveGoal(goalId){
@@ -1238,8 +1244,8 @@ function renderGoals(){
 
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
-      ? `Target: ${Number(g.targetWords||0).toLocaleString()} words`
-      : `Target: ${g.targetDate}`;
+      ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
+      : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
     const noteLine = g.notes ? ` · ${g.notes}` : "";
     return `
       <div class="goal-item">
@@ -1435,6 +1441,8 @@ function deleteManualEntry(id){
    Persistence
 ========================= */
 function persistAll(){
+  hasLocalMutations = true;
+
   const payload = {
     v: 2,
     state,
@@ -1450,14 +1458,24 @@ function persistAll(){
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
 
   // Cloud save only when author is in edit mode
-  if (document.body.classList.contains('edit-mode')) {
+  if (isEditMode()) {
     fetch(SCRIPT_URL, {
       method: 'POST',
       // Keep this request "simple" for Google Apps Script CORS compatibility.
       // Setting application/json forces a preflight that Apps Script web apps
       // often reject, causing cloud saves to silently fail.
       body: JSON.stringify(payload)
-    }).catch(()=>console.log('Cloud save failed.'));
+    })
+    .then(res => {
+      if(!res.ok){
+        console.warn(`[Cloud Save] Failed with status ${res.status}.`);
+      }else{
+        console.info('[Cloud Save] Synced successfully.');
+      }
+    })
+    .catch(()=>console.warn('[Cloud Save] Network error; local copy is still saved.'));
+  }else{
+    console.info('[Local Save] Saved locally only. Use ?mode=edit to sync to cloud.');
   }
 }
 
