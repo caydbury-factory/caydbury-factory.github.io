@@ -741,30 +741,34 @@ if (mode === 'edit') {
   document.body.classList.add('edit-mode');
 }
 
+function applySavedData(data){
+  if(!data || typeof data !== "object") return false;
+
+  if(Array.isArray(data.state)) state = data.state;
+  if(Array.isArray(data.sessions)) sessions = data.sessions;
+  if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
+
+  if(Array.isArray(data.goals)) goals = data.goals;
+  if(Array.isArray(data.proItems)) proItems = data.proItems;
+  if(Array.isArray(data.activity)) activity = data.activity;
+  if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
+
+  return true;
+}
+
+function parseSavedAt(data){
+  const ts = Date.parse(data?.savedAt || "");
+  return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
+}
+
 async function loadFromCloud(){
   try{
     const response = await fetch(SCRIPT_URL);
     const data = await response.json();
-
-    // Only apply if it looks like saved data
-    if(!data || typeof data !== 'object') return false;
-
-    if(Array.isArray(data.state)) state = data.state;
-    if(Array.isArray(data.sessions)) sessions = data.sessions;
-    if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
-
-    if(Array.isArray(data.goals)) goals = data.goals;
-    if(Array.isArray(data.proItems)) proItems = data.proItems;
-    if(Array.isArray(data.activity)) activity = data.activity;
-    if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
-
-    // local backup sync
-    localStorage.setItem(LS_KEY, JSON.stringify(data));
-
-    return true;
+    return data && typeof data === "object" ? data : null;
   }catch(e){
-    console.log('New site or error loading.');
-    return false;
+    console.log("New site or error loading.");
+    return null;
   }
 }
 
@@ -963,6 +967,8 @@ let proItems = []; // {id,title,url,note,createdAt}
 
 // Activity log
 let activity = []; // {id, type, text, ts, system:boolean, manual:boolean}
+let bootHydrationComplete = false;
+let editsDuringBoot = false;
 
 /* =========================
    NEW: activity logging
@@ -1417,6 +1423,7 @@ function deleteManualEntry(id){
 function persistAll(){
   const payload = {
     v: 2,
+    savedAt: new Date().toISOString(),
     state,
     sessions,
     selectedIndex,
@@ -1426,6 +1433,10 @@ function persistAll(){
     workspaceTab
   };
 
+  if(!bootHydrationComplete){
+    editsDuringBoot = true;
+  }
+
   // Local save always
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
 
@@ -1433,7 +1444,9 @@ function persistAll(){
   if (document.body.classList.contains('edit-mode')) {
     fetch(SCRIPT_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // Keep this request "simple" for Google Apps Script CORS compatibility.
+      // Setting application/json forces a preflight that Apps Script web apps
+      // often reject, causing cloud saves to silently fail.
       body: JSON.stringify(payload)
     }).catch(()=>console.log('Cloud save failed.'));
   }
@@ -1479,19 +1492,11 @@ function resetEverything(){
 function loadAll(){
   try{
     const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return;
+    if(!raw) return null;
     const data = JSON.parse(raw);
-
-    if(Array.isArray(data.state)) state = data.state;
-    if(Array.isArray(data.sessions)) sessions = data.sessions;
-    if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
-
-    if(Array.isArray(data.goals)) goals = data.goals;
-    if(Array.isArray(data.proItems)) proItems = data.proItems;
-    if(Array.isArray(data.activity)) activity = data.activity;
-    if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
+    return data && typeof data === "object" ? data : null;
   }catch(e){
-    // ignore
+    return null;
   }
 }
 
@@ -1499,10 +1504,38 @@ function loadAll(){
    Boot
 ========================= */
 (async function boot(){
-  const ok = await loadFromCloud();
-  if(!ok){
-    loadAll();
+  const localData = loadAll();
+  const cloudData = await loadFromCloud();
+
+  if(editsDuringBoot){
+    bootHydrationComplete = true;
+    return;
   }
+
+  const inEditMode = document.body.classList.contains("edit-mode");
+  const localTs = parseSavedAt(localData);
+  const cloudTs = parseSavedAt(cloudData);
+
+  let preferred = null;
+
+  if(inEditMode){
+    // In author mode, prefer local unsynced edits to avoid them being overwritten
+    // by older cloud payloads after a refresh.
+    preferred = localTs >= cloudTs ? localData : cloudData;
+  }else{
+    // Public view defaults to cloud, unless local is clearly newer.
+    preferred = cloudData || localData;
+    if(localData && cloudData && localTs > cloudTs){
+      preferred = localData;
+    }
+  }
+
+  if(preferred){
+    applySavedData(preferred);
+    localStorage.setItem(LS_KEY, JSON.stringify(preferred));
+  }
+
+  bootHydrationComplete = true;
   refreshUI();
 
    // Ensure we always have at most one active goal (in case of old data)
