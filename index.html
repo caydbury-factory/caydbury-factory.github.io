@@ -511,7 +511,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
           <div class="panel-head">
             <div class="tabs" role="tablist" aria-label="Workspace tabs">
               <button class="tab" id="tabGoals" role="tab" aria-selected="true" aria-controls="panelGoals" onclick="switchWorkspaceTab('goals')">Project Goals</button>
-              <button class="tab author-only" id="tabPro" role="tab" aria-selected="false" aria-controls="panelPro" onclick="switchWorkspaceTab('pro')">Procrastination Station</button>
+              <button class="tab" id="tabPro" role="tab" aria-selected="false" aria-controls="panelPro" onclick="switchWorkspaceTab('pro')">Procrastination Station</button>
             </div>
 
             <div class="row" style="justify-content:flex-end">
@@ -543,7 +543,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
             </div>
 
             <!-- Procrastination Station tab -->
-            <div id="panelPro" class="author-only" role="tabpanel" aria-labelledby="tabPro" hidden>
+            <div id="panelPro" role="tabpanel" aria-labelledby="tabPro" hidden>
               <div class="row">
                 <div class="field">
                   <label for="proTitle">Title</label>
@@ -741,34 +741,30 @@ if (mode === 'edit') {
   document.body.classList.add('edit-mode');
 }
 
-function applySavedData(data){
-  if(!data || typeof data !== "object") return false;
-
-  if(Array.isArray(data.state)) state = data.state;
-  if(Array.isArray(data.sessions)) sessions = data.sessions;
-  if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
-
-  if(Array.isArray(data.goals)) goals = data.goals;
-  if(Array.isArray(data.proItems)) proItems = data.proItems;
-  if(Array.isArray(data.activity)) activity = data.activity;
-  if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
-
-  return true;
-}
-
-function parseSavedAt(data){
-  const ts = Date.parse(data?.savedAt || "");
-  return Number.isFinite(ts) ? ts : Number.NEGATIVE_INFINITY;
-}
-
 async function loadFromCloud(){
   try{
     const response = await fetch(SCRIPT_URL);
     const data = await response.json();
-    return data && typeof data === "object" ? data : null;
+
+    // Only apply if it looks like saved data
+    if(!data || typeof data !== 'object') return false;
+
+    if(Array.isArray(data.state)) state = data.state;
+    if(Array.isArray(data.sessions)) sessions = data.sessions;
+    if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
+
+    if(Array.isArray(data.goals)) goals = data.goals;
+    if(Array.isArray(data.proItems)) proItems = data.proItems;
+    if(Array.isArray(data.activity)) activity = data.activity;
+    if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
+
+    // local backup sync
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+
+    return true;
   }catch(e){
-    console.log("New site or error loading.");
-    return null;
+    console.log('New site or error loading.');
+    return false;
   }
 }
 
@@ -967,8 +963,6 @@ let proItems = []; // {id,title,url,note,createdAt}
 
 // Activity log
 let activity = []; // {id, type, text, ts, system:boolean, manual:boolean}
-let bootHydrationComplete = false;
-let editsDuringBoot = false;
 
 /* =========================
    NEW: activity logging
@@ -1037,8 +1031,6 @@ function renderActivity(){
    NEW: tabs + primary action
 ========================= */
 function switchWorkspaceTab(which){
-  const inEditMode = document.body.classList.contains("edit-mode");
-  if(!inEditMode && which === "pro") which = "goals";
   workspaceTab = which;
 
   const tabGoals = document.getElementById("tabGoals");
@@ -1425,7 +1417,6 @@ function deleteManualEntry(id){
 function persistAll(){
   const payload = {
     v: 2,
-    savedAt: new Date().toISOString(),
     state,
     sessions,
     selectedIndex,
@@ -1434,10 +1425,6 @@ function persistAll(){
     activity,
     workspaceTab
   };
-
-  if(!bootHydrationComplete){
-    editsDuringBoot = true;
-  }
 
   // Local save always
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
@@ -1494,11 +1481,19 @@ function resetEverything(){
 function loadAll(){
   try{
     const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return null;
+    if(!raw) return;
     const data = JSON.parse(raw);
-    return data && typeof data === "object" ? data : null;
+
+    if(Array.isArray(data.state)) state = data.state;
+    if(Array.isArray(data.sessions)) sessions = data.sessions;
+    if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
+
+    if(Array.isArray(data.goals)) goals = data.goals;
+    if(Array.isArray(data.proItems)) proItems = data.proItems;
+    if(Array.isArray(data.activity)) activity = data.activity;
+    if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
   }catch(e){
-    return null;
+    // ignore
   }
 }
 
@@ -1506,38 +1501,10 @@ function loadAll(){
    Boot
 ========================= */
 (async function boot(){
-  const localData = loadAll();
-  const cloudData = await loadFromCloud();
-
-  if(editsDuringBoot){
-    bootHydrationComplete = true;
-    return;
+  const ok = await loadFromCloud();
+  if(!ok){
+    loadAll();
   }
-
-  const inEditMode = document.body.classList.contains("edit-mode");
-  const localTs = parseSavedAt(localData);
-  const cloudTs = parseSavedAt(cloudData);
-
-  let preferred = null;
-
-  if(inEditMode){
-    // In author mode, prefer local unsynced edits to avoid them being overwritten
-    // by older cloud payloads after a refresh.
-    preferred = localTs >= cloudTs ? localData : cloudData;
-  }else{
-    // Public view defaults to cloud, unless local is clearly newer.
-    preferred = cloudData || localData;
-    if(localData && cloudData && localTs > cloudTs){
-      preferred = localData;
-    }
-  }
-
-  if(preferred){
-    applySavedData(preferred);
-    localStorage.setItem(LS_KEY, JSON.stringify(preferred));
-  }
-
-  bootHydrationComplete = true;
   refreshUI();
 
    // Ensure we always have at most one active goal (in case of old data)
