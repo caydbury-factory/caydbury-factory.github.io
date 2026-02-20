@@ -967,7 +967,8 @@ let proItems = []; // {id,title,url,note,createdAt}
 
 // Activity log
 let activity = []; // {id, type, text, ts, system:boolean, manual:boolean}
-let dataRevision = 0;
+let bootHydrationComplete = false;
+let editsDuringBoot = false;
 
 /* =========================
    NEW: activity logging
@@ -1434,7 +1435,9 @@ function persistAll(){
     workspaceTab
   };
 
-  dataRevision += 1;
+  if(!bootHydrationComplete){
+    editsDuringBoot = true;
+  }
 
   // Local save always
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
@@ -1504,16 +1507,10 @@ function loadAll(){
 ========================= */
 (async function boot(){
   const localData = loadAll();
-  if(localData){
-    applySavedData(localData);
-    refreshUI();
-  }
-
-  const bootRevision = dataRevision;
   const cloudData = await loadFromCloud();
 
-  // User made changes while cloud was loading; do not overwrite their new state.
-  if(dataRevision !== bootRevision){
+  if(editsDuringBoot){
+    bootHydrationComplete = true;
     return;
   }
 
@@ -1540,6 +1537,7 @@ function loadAll(){
     localStorage.setItem(LS_KEY, JSON.stringify(preferred));
   }
 
+  bootHydrationComplete = true;
   refreshUI();
 
    // Ensure we always have at most one active goal (in case of old data)
