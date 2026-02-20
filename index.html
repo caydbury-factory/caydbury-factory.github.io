@@ -1480,10 +1480,10 @@ function persistAll(){
   if (document.body.classList.contains('edit-mode')) {
     fetch(SCRIPT_URL, {
       method: "POST",
+      mode: "no-cors",
       body: JSON.stringify(payload),
     })
-    .then(r => r.json())
-    .then(res => console.log("Cloud save:", res))
+    .then(() => console.log("Cloud save sent."))
     .catch(err => console.error("Cloud save failed:", err));
   }
 }
