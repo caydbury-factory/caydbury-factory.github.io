@@ -1221,13 +1221,18 @@ function deleteGoal(goalId){
 
 function renderGoals(){
   console.log("GOALS ARRAY:", goals);
-  
+
   const list = document.getElementById("goalsList");
   const empty = document.getElementById("goalsEmpty");
-  const filter = document.getElementById("goalFilter").value;
+  const filterSelect = document.getElementById("goalFilter");
+
+  console.log("goalFilter element:", filterSelect);
+
+  const filter = filterSelect ? filterSelect.value : "all";
 
   const activeGoal = goals.find(g=>g.active);
-  document.getElementById("activeGoalPill").textContent = `Active: ${activeGoal ? activeGoal.name : "—"}`;
+  document.getElementById("activeGoalPill").textContent =
+    `Active: ${activeGoal ? activeGoal.name : "—"}`;
 
   let visible = goals.slice();
   if(filter === "active"){
@@ -1243,12 +1248,19 @@ function renderGoals(){
 
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
-      ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
-      : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
+      ? (g.targetWords
+          ? `Target: ${Number(g.targetWords).toLocaleString()} words`
+          : "Target: not set")
+      : (g.targetDate
+          ? `Target: ${g.targetDate}`
+          : "Target: not set");
+
     const noteLine = g.notes ? ` · ${g.notes}` : "";
+
     return `
       <div class="goal-item">
-        <button class="goal-toggle" aria-label="Toggle active goal" aria-pressed="${g.active ? "true":"false"}"
+        <button class="goal-toggle"
+          aria-pressed="${g.active ? "true":"false"}"
           onclick="setActiveGoal('${g.id}')">
           ${g.active ? "■" : "□"}
         </button>
@@ -1259,8 +1271,10 @@ function renderGoals(){
         </div>
 
         <div class="goal-actions">
-          <button class="small-link" onclick="openGoalModal('${g.id}')" aria-label="Edit goal">Edit</button>
-          <button class="small-link" onclick="deleteGoal('${g.id}')" aria-label="Delete goal">Delete</button>
+          <button class="small-link"
+            onclick="openGoalModal('${g.id}')">Edit</button>
+          <button class="small-link"
+            onclick="deleteGoal('${g.id}')">Delete</button>
         </div>
       </div>
     `;
