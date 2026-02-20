@@ -1604,8 +1604,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
   // In view mode, keep an existing local snapshot (user-entered goals/notes) instead of
   // replacing it with cloud defaults on every load. In edit mode we always sync cloud.
-  if (isEditMode() || !hasLocalSnapshot()) {
-    await loadFromCloud();
+  await loadFromCloud();
   }
 
   refreshUI();
