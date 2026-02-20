@@ -449,6 +449,19 @@ input, select, textarea{
 .author-only { display: none !important; }
 body.edit-mode .author-only { display: inline-block !important; }
 body.edit-mode .panel-head button.author-only { display: block !important; }
+
+/* Author controls layout (keeps your look intact) */
+.author-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.reset-wrap{display:flex;gap:10px;align-items:center}
+button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
+
+/* Tiny toggle switch */
+.switch{position:relative;display:inline-block;width:40px;height:22px}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#dfe8eb;transition:.18s;border-radius:999px;border:1px solid var(--border)}
+.slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:2px;background:white;transition:.18s;border-radius:999px;box-shadow:0 4px 10px rgba(0,0,0,.10)}
+.switch input:checked + .slider{background:rgba(184,93,93,.28);border-color:rgba(184,93,93,.45)}
+.switch input:checked + .slider:before{transform:translateX(18px)}
 </style>
 </head>
 
@@ -467,7 +480,16 @@ body.edit-mode .panel-head button.author-only { display: block !important; }
         Word by word. Chapter by chapter.<br>
         No shortcuts. No vanishing drafts.
       </p>
-      <button class="author-only" onclick="openModal()">Author’s Update</button>
+      <div class="author-controls">
+        <button class="author-only" onclick="openModal()">Author’s Update</button>
+        <div class="author-only reset-wrap" aria-label="Reset controls">
+          <label class="switch" title="Arm reset (testing)">
+            <input type="checkbox" id="resetToggle" onchange="document.getElementById('resetBtn').disabled = !this.checked;">
+            <span class="slider"></span>
+          </label>
+          <button class="btn-mini btn-danger" id="resetBtn" onclick="resetEverything()" disabled>Reset</button>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -972,6 +994,7 @@ function addActivity({type, text, system=false, manual=false}){
   };
   activity.unshift(entry);
   renderActivity();
+  persistAll();
 }
 
 function renderActivity(){
@@ -1410,8 +1433,46 @@ function persistAll(){
   if (document.body.classList.contains('edit-mode')) {
     fetch(SCRIPT_URL, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).catch(()=>console.log('Cloud save failed.'));
+  }
+}
+
+// Author-only: wipe everything for testing
+function resetEverything(){
+  const toggle = document.getElementById('resetToggle');
+  if (toggle && !toggle.checked) {
+    alert('Flip the toggle first to arm the reset.');
+    return;
+  }
+
+  const ok = confirm('RESET EVERYTHING to zero? This clears local + cloud data for this ledger.');
+  if (!ok) return;
+
+  // Reset core manuscript data
+  state = carNames.map(name => ({ name, current: 0, goal: 3000, stage: 'Outline' }));
+  sessions = [];
+  selectedIndex = 0;
+
+  // Reset workspace data
+  goals = [];
+  proItems = [];
+  activity = [];
+  workspaceTab = 'goals';
+
+  // Clear local storage
+  localStorage.removeItem(LS_KEY);
+
+  // Reset UI + save (cloud save only in edit-mode)
+  refreshUI();
+  persistAll();
+
+  // Disarm toggle + disable button again
+  if (toggle) {
+    toggle.checked = false;
+    const btn = document.getElementById('resetBtn');
+    if (btn) btn.disabled = true;
   }
 }
 
