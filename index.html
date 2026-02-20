@@ -679,7 +679,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
     </div>
 
     <div class="modal-footer">
-      <button id="goalSaveBtn" onclick="saveGoal()">Save</button>
+      <button type="button" id="goalSaveBtn">Save</button>
       <button class="cancel" onclick="closeGoalModal()">Cancel</button>
     </div>
   </div>
@@ -1527,6 +1527,14 @@ function loadAll(){
 /* =========================
    Boot
 ========================= */
+// Bind goal save button safely (Google Sites compatible)
+document.addEventListener("DOMContentLoaded", function(){
+  const btn = document.getElementById("goalSaveBtn");
+  if(btn){
+    btn.addEventListener("click", saveGoal);
+  }
+});
+  
 (async function boot(){
   const ok = await loadFromCloud();
   if(!ok){
