@@ -753,10 +753,6 @@ if (mode === 'edit') {
 
 let hasLocalMutations = false;
 
-function isEditMode(){
-  return document.body.classList.contains('edit-mode');
-}
-
 async function loadFromCloud(){
   try{
     const response = await fetch(SCRIPT_URL);
