@@ -1478,7 +1478,14 @@ function persistAll(){
 
   // Cloud save only when author is in edit mode
   if (document.body.classList.contains('edit-mode')) {
-    console.log("Cloud save temporarily disabled.");
+    fetch(SCRIPT_URL, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" }
+    })
+    .then(r => r.json())
+    .then(res => console.log("Cloud save:", res))
+    .catch(err => console.error("Cloud save failed:", err));
   }
 }
 
