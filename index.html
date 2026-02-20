@@ -1171,6 +1171,7 @@ function saveGoal(){
       updatedAt: now
     };
     goals.unshift(g);
+    console.log("GOALS AFTER PUSH:", goals);
 
     addActivity({
       type:"Goal Created",
