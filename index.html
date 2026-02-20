@@ -1499,15 +1499,10 @@ function loadAll(){
    Boot
 ========================= */
 (async function boot(){
-  loadAll(); // always load local first
-
-  const cloudLoaded = await loadFromCloud();
-
-  // Only overwrite local if cloud actually has meaningful data
-  if(cloudLoaded && goals.length === 0 && proItems.length === 0 && activity.length === 0){
-    // cloud had data, but local was empty — fine
+  const ok = await loadFromCloud();
+  if(!ok){
+    loadAll();
   }
-
   refreshUI();
 
    // Ensure we always have at most one active goal (in case of old data)
