@@ -1124,7 +1124,8 @@ function syncGoalTypeUI(){
   }
 }
 
-function saveGoal(){
+function saveGoal(e){
+  if (e && e.preventDefault) e.preventDefault();
   console.log("EditingGoalId at save:", editingGoalId);
   console.log("SAVE GOAL FIRED");
     
@@ -1144,7 +1145,7 @@ function saveGoal(){
     ? (targetWords ? `${targetWords.toLocaleString()} words` : "no word target yet")
     : (targetDate ? `by ${targetDate}` : "no date target yet");
 
-  if(editingGoalId){
+  if(editingGoalId && typeof editingGoalId === "string"){
     const idx = goals.findIndex(g=>g.id===editingGoalId);
     if(idx >= 0){
       const prev = goals[idx];
@@ -1544,7 +1545,7 @@ function loadAll(){
 document.addEventListener("DOMContentLoaded", function(){
   const btn = document.getElementById("goalSaveBtn");
   if(btn){
-    btn.addEventListener("click", saveGoal);
+    btn.addEventListener("click", () => saveGoal());
   }
 });
   
