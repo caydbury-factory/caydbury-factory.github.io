@@ -753,6 +753,10 @@ if (mode === 'edit') {
 
 let hasLocalMutations = false;
 
+function isEditMode(){
+  return document.body.classList.contains('edit-mode');
+}
+
 async function loadFromCloud(){
   try{
     const response = await fetch(SCRIPT_URL);
@@ -1181,6 +1185,7 @@ function saveGoal(){
   closeGoalModal();
   renderGoals();
   persistAll();
+  console.info(`[Goals] Saved goal "${name}" (${type}).`);
 }
 
 function setActiveGoal(goalId){
@@ -1453,14 +1458,24 @@ function persistAll(){
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
 
   // Cloud save only when author is in edit mode
-  if (document.body.classList.contains('edit-mode')) {
+  if (isEditMode()) {
     fetch(SCRIPT_URL, {
       method: 'POST',
       // Keep this request "simple" for Google Apps Script CORS compatibility.
       // Setting application/json forces a preflight that Apps Script web apps
       // often reject, causing cloud saves to silently fail.
       body: JSON.stringify(payload)
-    }).catch(()=>console.log('Cloud save failed.'));
+    })
+    .then(res => {
+      if(!res.ok){
+        console.warn(`[Cloud Save] Failed with status ${res.status}.`);
+      }else{
+        console.info('[Cloud Save] Synced successfully.');
+      }
+    })
+    .catch(()=>console.warn('[Cloud Save] Network error; local copy is still saved.'));
+  }else{
+    console.info('[Local Save] Saved locally only. Use ?mode=edit to sync to cloud.');
   }
 }
 
