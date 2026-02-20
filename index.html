@@ -1263,28 +1263,39 @@ function renderGoals(){
 
     const noteLine = g.notes ? ` · ${g.notes}` : "";
 
-    return `
-      <div class="goal-item">
-        <button class="goal-toggle"
-          aria-pressed="${g.active ? "true":"false"}"
-          onclick="setActiveGoal('${g.id}')">
-          ${g.active ? "■" : "□"}
-        </button>
+const isAuthor = document.body.classList.contains("edit-mode");
 
-        <div class="goal-meta">
-          <div class="name">${escapeHtml(g.name)}</div>
-          <div class="sub">${escapeHtml(sub + noteLine)}</div>
-        </div>
+return `
+  <div class="goal-item">
+    ${
+      isAuthor
+        ? `<button class="goal-toggle"
+             aria-pressed="${g.active ? "true":"false"}"
+             onclick="setActiveGoal('${g.id}')">
+             ${g.active ? "■" : "□"}
+           </button>`
+        : `<div style="width:36px;height:36px;display:grid;place-items:center;">
+             ${g.active ? "■" : "□"}
+           </div>`
+    }
 
-        <div class="goal-actions">
-          <button class="small-link"
-            onclick="openGoalModal('${g.id}')">Edit</button>
-          <button class="small-link"
-            onclick="deleteGoal('${g.id}')">Delete</button>
-        </div>
-      </div>
-    `;
-  }).join("");
+    <div class="goal-meta">
+      <div class="name">${escapeHtml(g.name)}</div>
+      <div class="sub">${escapeHtml(sub + noteLine)}</div>
+    </div>
+
+    ${
+      isAuthor
+        ? `<div class="goal-actions">
+             <button class="small-link"
+               onclick="openGoalModal('${g.id}')">Edit</button>
+             <button class="small-link"
+               onclick="deleteGoal('${g.id}')">Delete</button>
+           </div>`
+        : ``
+    }
+  </div>
+`;
 }
 
 /* =========================
