@@ -515,7 +515,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
             </div>
 
             <div class="row" style="justify-content:flex-end">
-              <button class="btn-mini" id="primaryActionBtn" onclick="openGoalModal()">+ Add New</button>
+              <button class="btn-mini author-only" id="primaryActionBtn" onclick="openGoalModal()">+ Add New</button>
             </div>
           </div>
 
@@ -1045,8 +1045,9 @@ function renderActivity(){
   }
   empty.style.display = "none";
 
+  const isAuthor = isEditMode();
   log.innerHTML = activity.map(e=>{
-    const controls = e.manual ? `
+    const controls = (isAuthor && e.manual) ? `
       <div class="controls">
         <button class="btn-quiet btn-mini" onclick="editManualEntry('${e.id}')">Edit</button>
         <button class="btn-danger btn-mini" onclick="deleteManualEntry('${e.id}')">Delete</button>
@@ -1098,6 +1099,7 @@ function switchWorkspaceTab(which){
    NEW: goals
 ========================= */
 function openGoalModal(goalId=null){
+  if(!isEditMode()) return;
   editingGoalId = goalId;
   const m = document.getElementById("goalModal");
   const title = document.getElementById("goalModalTitle");
@@ -1144,6 +1146,7 @@ function syncGoalTypeUI(){
 }
 
 function saveGoal(e){
+  if(!isEditMode()) return;
   if (e && e.preventDefault) e.preventDefault();
   console.log("EditingGoalId at save:", editingGoalId);
   console.log("SAVE GOAL FIRED");
@@ -1212,6 +1215,7 @@ function saveGoal(e){
 }
 
 function setActiveGoal(goalId){
+  if(!isEditMode()) return;
   const g = goals.find(x=>x.id===goalId);
   if(!g) return;
 
@@ -1224,6 +1228,7 @@ function setActiveGoal(goalId){
 }
 
 function deleteGoal(goalId){
+  if(!isEditMode()) return;
   const g = goals.find(x=>x.id===goalId);
   if(!g) return;
 
@@ -1272,31 +1277,37 @@ function renderGoals(){
   }
   empty.style.display = "none";
 
+  const isAuthor = isEditMode();
+
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
       ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
       : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
     const noteLine = g.notes ? ` · ${g.notes}` : "";
-
-    return `
-      <div class="goal-item">
-        <button class="goal-toggle"
+    const toggle = isAuthor
+      ? `<button class="goal-toggle"
           aria-pressed="${g.active ? "true":"false"}"
           onclick="setActiveGoal('${g.id}')">
           ${g.active ? "■" : "□"}
-        </button>
+        </button>`
+      : `<div aria-hidden="true"></div>`;
+    const controls = isAuthor
+      ? `<div class="goal-actions">
+          <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
+          <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+        </div>`
+      : "";
+
+    return `
+      <div class="goal-item">
+        ${toggle}
 
         <div class="goal-meta">
           <div class="name">${escapeHtml(g.name)}</div>
           <div class="sub">${escapeHtml(sub + noteLine)}</div>
         </div>
 
-        <div class="goal-actions">
-          <button class="small-link"
-            onclick="openGoalModal('${g.id}')">Edit</button>
-          <button class="small-link"
-            onclick="deleteGoal('${g.id}')">Delete</button>
-        </div>
+        ${controls}
       </div>
     `;
   }).join("");
@@ -1306,6 +1317,7 @@ function renderGoals(){
    NEW: Procrastination Station
 ========================= */
 function saveProcrastinationItem(){
+  if(!isEditMode()) return;
   const title = document.getElementById("proTitle").value.trim();
   const url = document.getElementById("proUrl").value.trim();
   const note = document.getElementById("proNote").value.trim();
@@ -1342,6 +1354,7 @@ function saveProcrastinationItem(){
 }
 
 function openProModal(){
+  if(!isEditMode()) return;
   document.getElementById("proModal").style.display = "flex";
   document.getElementById("proTitle").focus();
 }
@@ -1351,6 +1364,7 @@ function closeProModal(){
 }
 
 function deleteProItem(id){
+  if(!isEditMode()) return;
   const item = proItems.find(x=>x.id===id);
   if(!item) return;
   const ok = confirm(`Delete "${item.title}"?`);
@@ -1403,6 +1417,7 @@ function renderProItems(){
 let editingManualLogId = null;
 
 function openNoteModal(existingId=null){
+  if(!isEditMode()) return;
   editingManualLogId = existingId;
   const modal = document.getElementById("noteModal");
   const title = document.getElementById("noteModalTitle");
@@ -1428,6 +1443,7 @@ function closeNoteModal(){
 }
 
 function saveManualNote(){
+  if(!isEditMode()) return;
   const text = document.getElementById("noteText").value.trim();
   if(!text){
     alert("Write something first.");
@@ -1458,9 +1474,11 @@ function saveManualNote(){
 }
 
 function editManualEntry(id){
+  if(!isEditMode()) return;
   openNoteModal(id);
 }
 function deleteManualEntry(id){
+  if(!isEditMode()) return;
   const entry = activity.find(e=>e.id===id);
   if(!entry || !entry.manual) return;
   const ok = confirm("Delete this note?");
