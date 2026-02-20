@@ -1218,6 +1218,8 @@ function deleteGoal(goalId){
 }
 
 function renderGoals(){
+  console.log("GOALS ARRAY:", goals);
+  
   const list = document.getElementById("goalsList");
   const empty = document.getElementById("goalsEmpty");
   const filter = document.getElementById("goalFilter").value;
