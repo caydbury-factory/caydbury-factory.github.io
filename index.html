@@ -1122,6 +1122,8 @@ function syncGoalTypeUI(){
 }
 
 function saveGoal(){
+  console.log("SAVE GOAL FIRED");
+    
   const name = document.getElementById("goalName").value.trim();
   const type = document.getElementById("goalType").value;
   const notes = document.getElementById("goalNotes").value.trim();
