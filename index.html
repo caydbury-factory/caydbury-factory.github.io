@@ -511,7 +511,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
           <div class="panel-head">
             <div class="tabs" role="tablist" aria-label="Workspace tabs">
               <button class="tab" id="tabGoals" role="tab" aria-selected="true" aria-controls="panelGoals" onclick="switchWorkspaceTab('goals')">Project Goals</button>
-              <button class="tab" id="tabPro" role="tab" aria-selected="false" aria-controls="panelPro" onclick="switchWorkspaceTab('pro')">Procrastination Station</button>
+              <button class="tab author-only" id="tabPro" role="tab" aria-selected="false" aria-controls="panelPro" onclick="switchWorkspaceTab('pro')">Procrastination Station</button>
             </div>
 
             <div class="row" style="justify-content:flex-end">
@@ -543,7 +543,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
             </div>
 
             <!-- Procrastination Station tab -->
-            <div id="panelPro" role="tabpanel" aria-labelledby="tabPro" hidden>
+            <div id="panelPro" class="author-only" role="tabpanel" aria-labelledby="tabPro" hidden>
               <div class="row">
                 <div class="field">
                   <label for="proTitle">Title</label>
@@ -1037,6 +1037,8 @@ function renderActivity(){
    NEW: tabs + primary action
 ========================= */
 function switchWorkspaceTab(which){
+  const inEditMode = document.body.classList.contains("edit-mode");
+  if(!inEditMode && which === "pro") which = "goals";
   workspaceTab = which;
 
   const tabGoals = document.getElementById("tabGoals");
