@@ -986,16 +986,35 @@ function updateAnalytics(){
   hourlyGrid.innerHTML="";
   hourlyXAxis.innerHTML="";
 
-  // Create subtle 5-step grid
-  const steps = 5;
-  for(let i=0;i<=steps;i++){
-    const value = Math.round((maxH/steps)*(steps-i));
+  hourly.style.gridTemplateColumns = `repeat(24, 1fr)`;
+  hourlyXAxis.style.gridTemplateColumns = `repeat(24, 1fr)`;
+
+  // ---- Y AXIS + GRID (5 steps) ----
+  for(let i=0;i<=5;i++){
+    const value = Math.round((maxH/5)*(5-i));
+  
     const label = document.createElement("div");
     label.textContent = value.toLocaleString();
     hourlyYAxis.appendChild(label);
-
+  
     const line = document.createElement("div");
     hourlyGrid.appendChild(line);
+  }
+
+
+  // X-axis labels (24 slots, label every 3 hours)
+  for(let i=0;i<24;i++){
+    const span = document.createElement("span");
+  
+    if(i % 3 === 0){
+      const date = new Date();
+      date.setHours(i);
+      span.textContent = date.toLocaleTimeString([], {hour:'numeric'});
+    } else {
+      span.textContent = "";
+    }
+  
+    hourlyXAxis.appendChild(span);
   }
 
   // Bars 
@@ -1005,15 +1024,6 @@ function updateAnalytics(){
     b.style.height=(v/maxH*100)+"%";
     hourly.appendChild(b);
   });
-
-  // X-axis labels formatted (5am, 6am, etc.)
-  for(let i=0;i<24;i+=3){
-    const span = document.createElement("span");
-    const date = new Date();
-    date.setHours(i);
-    span.textContent = date.toLocaleTimeString([], {hour:'numeric'});
-    hourlyXAxis.appendChild(span);
-  }  
 
   const dominant=hourMap.indexOf(Math.max(...hourMap));
   let animal="—";
