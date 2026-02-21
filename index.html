@@ -1138,15 +1138,54 @@ function updateAnalytics(){
     dailyXAxis.appendChild(span);
   }
 
-  // Finish estimate (simple)
+  // Finish estimate
+  const MASTER_TARGET = 200000;
+  const activeGoal = goals.find(g=>g.active);
   const totalAll = state.reduce((s,c)=>s+c.current,0);
-  const remaining = Math.max(0, GOAL - totalAll);
-  let estimate = "—";
-  if(avg > 0){
-    const sessionsLeft = Math.ceil(remaining / avg);
-    estimate = `${sessionsLeft.toLocaleString()}`;
+  let targetTotal = MASTER_TARGET;
+
+  if(activeGoal && activeGoal.type === "words" && activeGoal.targetWords){
+    targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
   }
-  document.getElementById("finishEstimate").innerText = `At this pace, the manuscript may reach completion in ${estimate} more sittings.`;
+
+  const remaining = Math.max(0, targetTotal - totalAll);
+
+  const daysWritten = dayMap.filter(v=>v>0).length;
+  const totalThisMonth = dayMap.reduce((s,v)=>s+v,0);
+  const avgPerDay = daysWritten ? (totalThisMonth / daysWritten) : 0;
+
+  let line1 = "—";
+  let line2 = "";
+
+  if(valid.length > 0){
+    if(activeGoal && activeGoal.type === "date" && activeGoal.targetDate){
+      const targetDate = new Date(activeGoal.targetDate);
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      targetDate.setHours(0,0,0,0);
+      const daysLeft = Math.ceil((targetDate - today) / msPerDay);
+
+      if(daysLeft > 0){
+        const neededPerDay = Math.ceil(remaining / daysLeft);
+        line1 = targetDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
+        line2 = `To meet goal: ${neededPerDay.toLocaleString()} words/day`;
+      }
+    } else if(avgPerDay > 0){
+      const daysNeeded = Math.ceil(remaining / avgPerDay);
+      const finishDate = new Date();
+      finishDate.setDate(finishDate.getDate() + daysNeeded);
+      line1 = finishDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
+      line2 = `At current pace: ${Math.round(avgPerDay).toLocaleString()} words/day`;
+    }
+  }
+
+  document.getElementById("finishEstimate").innerHTML = `
+  ${line1}
+  <div style="font-size:13px; color:var(--muted); margin-top:6px;">
+    ${line2}
+  </div>
+`;
 }
 
 /* =========================
