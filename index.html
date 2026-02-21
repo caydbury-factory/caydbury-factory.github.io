@@ -761,48 +761,31 @@ function hasLocalSnapshot(){
   return !!localStorage.getItem(LS_KEY);
 }
 
-async function loadFromCloud(){
-  try{
-    const response = await fetch(SCRIPT_URL);
+async function loadFromCloud() {
+  try {
+    const response = await fetch(
+      SCRIPT_URL + "?t=" + Date.now(),  // ← forces fresh request
+      {
+        method: "GET",
+        cache: "no-store"
+      }
+    );
+
     const data = await response.json();
+    console.log("[Cloud Load] Fresh fetch", data);
 
-    // Only apply if it looks like saved data
-    if(!data || typeof data !== 'object') return false;
-
-    // If user already changed local state while cloud was loading,
-    // never overwrite those in-page edits with stale remote data.
-    if (hasLocalMutations) return false;
-
-    if(Array.isArray(data.state)) state = data.state;
-    if(Array.isArray(data.sessions)) sessions = data.sessions;
-    if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
-
-    if(Array.isArray(data.goals) && data.goals.length){
-      goals = data.goals;
+    if (data && typeof data === "object") {
+      state = data.state || state;
+      sessions = data.sessions || [];
+      selectedIndex = data.selectedIndex || 0;
+      goals = data.goals || [];
+      proItems = data.proItems || [];
+      activity = data.activity || [];
+      workspaceTab = data.workspaceTab || "goals";
     }
-    
-    if(Array.isArray(data.proItems)) proItems = data.proItems;
-    if(Array.isArray(data.activity)) activity = data.activity;
-    if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
 
-    // Local backup sync: persist normalized in-memory shape, not raw cloud payload.
-    // This prevents accidental loss when cloud responses omit newer keys (e.g. goals/activity).
-    const normalized = {
-      v: 2,
-      state,
-      sessions,
-      selectedIndex,
-      goals,
-      proItems,
-      activity,
-      workspaceTab
-    };
-    localStorage.setItem(LS_KEY, JSON.stringify(normalized));
-
-    return true;
-  }catch(e){
-    console.log('New site or error loading.');
-    return false;
+  } catch (e) {
+    console.log("Cloud load failed:", e);
   }
 }
 
@@ -1599,27 +1582,23 @@ document.addEventListener("DOMContentLoaded", function(){
 });
   
 (async function boot(){
-  // Start from local cache first so legacy/partial cloud payloads cannot erase newer fields.
-  loadAll();
+  await loadFromCloud();   // ALWAYS pull fresh cloud
 
-  // In view mode, keep an existing local snapshot (user-entered goals/notes) instead of
-  // replacing it with cloud defaults on every load. In edit mode we always sync cloud.
-  if (isEditMode() || !hasLocalSnapshot()) {
-    await loadFromCloud();
+  // Only use local snapshot in edit mode
+  if (isEditMode()) {
+    loadAll();
   }
 
   refreshUI();
 
-   // Ensure we always have at most one active goal (in case of old data)
-  (function enforceSingleActive(){
-    const active = goals.filter(g => g.active);
-    if (active.length > 1) {
-      const keep = active[0].id;
-      goals.forEach(g => g.active = (g.id === keep));
-      persistAll();
-      renderGoals();
-    }
-  })();
+  // Enforce single active goal
+  const active = goals.filter(g => g.active);
+  if (active.length > 1) {
+    const keep = active[0].id;
+    goals.forEach(g => g.active = (g.id === keep));
+    persistAll();
+    renderGoals();
+  }
 })();
 </script>
 
