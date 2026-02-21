@@ -879,8 +879,6 @@ function refreshUI(){
 /* =========================
    Existing manuscript logic
 ========================= */
-const GOAL = 50000;
-
 const carNames = [
   "Engine",
   "Coach (Open) Car",
@@ -974,6 +972,7 @@ function submitSession(){
 }
 
 function updateAnalytics(){
+  const valid = sessions;
   const chartCap = 5000;
   const chartStep = 1000;
 
@@ -1009,8 +1008,6 @@ function updateAnalytics(){
     bar.setAttribute("aria-label", `${words.toLocaleString()} words`);
     return bar;
   }
-
-  const valid=sessions.filter(s=>s.stage!=="Outline");
 
   // Average per session
   const total=valid.reduce((s,v)=>s+v.words,0);
@@ -1137,17 +1134,64 @@ function updateAnalytics(){
   
     dailyXAxis.appendChild(span);
   }
+  
+// ===== MASTER MANUSCRIPT TARGET SYSTEM =====
 
-  // Finish estimate (simple)
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
-  const remaining = Math.max(0, GOAL - totalAll);
-  let estimate = "—";
-  if(avg > 0){
-    const sessionsLeft = Math.ceil(remaining / avg);
-    estimate = `${sessionsLeft.toLocaleString()}`;
-  }
-  document.getElementById("finishEstimate").innerText = `At this pace, the manuscript may reach completion in ${estimate} more sittings.`;
+const MASTER_TARGET = 200000;
+
+// Active goal
+const activeGoal = goals.find(g => g.active);
+
+// Total manuscript words
+const totalAll = state.reduce((s,c)=>s+c.current,0);
+
+// Determine target hierarchy
+let targetTotal = MASTER_TARGET;
+
+if(activeGoal && activeGoal.type === "words" && activeGoal.targetWords){
+  targetTotal = activeGoal.targetWords;
 }
+
+// Remaining words
+const remaining = Math.max(0, targetTotal - totalAll);
+
+// Daily average (calendar month logic already built above)
+const daysWritten = dayMap.filter(v=>v>0).length;
+const totalThisMonth = dayMap.reduce((s,v)=>s+v,0);
+const avgPerDay = daysWritten ? Math.round(totalThisMonth / daysWritten) : 0;
+  
+// ===== SMART HYBRID FINISH PREDICTOR (with second line) =====
+
+let line1 = "—";
+let line2 = "";
+
+if(activeGoal && activeGoal.type === "date" && activeGoal.targetDate){
+  const targetDate = new Date(activeGoal.targetDate);
+  const today = new Date();
+  const msLeft = targetDate - today;
+  const daysLeft = Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+
+  if(daysLeft > 0){
+    const neededPerDay = Math.ceil(remaining / daysLeft);
+    line1 = targetDate.toLocaleDateString();
+    line2 = `To meet goal: ${neededPerDay.toLocaleString()} words/day`;
+  }
+}
+else if(avgPerDay > 0){
+  const daysNeeded = Math.ceil(remaining / avgPerDay);
+  const finishDate = new Date();
+  finishDate.setDate(finishDate.getDate() + daysNeeded);
+
+  line1 = finishDate.toLocaleDateString();
+  line2 = `At current pace: ${avgPerDay.toLocaleString()} words/day`;
+}
+
+document.getElementById("finishEstimate").innerHTML = `
+  ${line1}
+  <div style="font-size:13px; color:var(--muted); margin-top:6px;">
+    ${line2}
+  </div>
+`;
 
 /* =========================
    NEW: persistence + models
