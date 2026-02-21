@@ -1135,7 +1135,15 @@ function updateAnalytics(){
   
     dailyXAxis.appendChild(span);
   }
- 
+
+  // ===== Predictor Data Setup =====
+
+  // Active goal
+  const activeGoal = goals.find(g => g.active);
+  
+  // Total words written
+  const totalAll = state.reduce((s,c)=>s+c.current,0);
+  
   // ===== MASTER MANUSCRIPT TARGET SYSTEM =====
 
   const MASTER_TARGET = 200000;
