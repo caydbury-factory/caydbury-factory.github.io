@@ -426,9 +426,8 @@ input, select, textarea{
 }
 
 .chart{
-  display:flex;
-  align-items:flex-end;
-  gap:3px;
+  display:grid;
+  align-items:end;
   height:100%;
   min-height:110px;
   position:relative;
@@ -436,14 +435,12 @@ input, select, textarea{
 }
 
 .chart-xaxis{
-  display:flex;
-  justify-content:space-between;
+  display:grid;
   font-size:10px;
   color:var(--muted);
   margin-top:6px;
 }
 .bar{
-  flex:1;
   background:var(--accent);
   border-radius:3px 3px 0 0;
   opacity:.8;
@@ -1026,51 +1023,76 @@ function updateAnalytics(){
   else if(dominant>=21||dominant<2)animal="Night Owl";
   document.getElementById("animalIndicator").innerText=animal;
 
-  // Daily chart (last 30 days buckets)
-  const days = 30;
-  const dayMap = new Array(days).fill(0);
+  // Daily chart (Calendar Month)
   const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-based
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  const dayMap = new Array(daysInMonth).fill(0);
+  
+  // Bucket sessions into correct calendar day
   valid.forEach(s=>{
     const d = new Date(s.timestamp);
-    const diff = Math.floor((now - d) / (1000*60*60*24));
-    if(diff >= 0 && diff < days){
-      dayMap[days-1-diff] += s.words;
+    if(d.getFullYear() === year && d.getMonth() === month){
+      const dayIndex = d.getDate() - 1;
+      dayMap[dayIndex] += s.words;
     }
   });
-  const maxD = Math.max(...dayMap,1);
-  const daily=document.getElementById("dailyChart");
+
+  const maxD = Math.max(...dayMap, 1);
+
+  const daily = document.getElementById("dailyChart");
   const dailyYAxis = document.getElementById("dailyYAxis");
   const dailyGrid = document.getElementById("dailyGrid");
   const dailyXAxis = document.getElementById("dailyXAxis");
+  
   daily.innerHTML="";
   dailyYAxis.innerHTML="";
   dailyGrid.innerHTML="";
   dailyXAxis.innerHTML="";
 
+  daily.style.gridTemplateColumns = `repeat(${daysInMonth}, 1fr)`;
+  dailyXAxis.style.gridTemplateColumns = `repeat(${daysInMonth}, 1fr)`;
+  
+  // Subtle 5-step Y grid
   for(let i=0;i<=5;i++){
     const value = Math.round((maxD/5)*(5-i));
     const label = document.createElement("div");
     label.textContent = value.toLocaleString();
     dailyYAxis.appendChild(label);
-
+  
     const line = document.createElement("div");
     dailyGrid.appendChild(line);
   }
   
-  // Bars  
-  dayMap.forEach(v=>{
+  // Bars (one per day)
+  dayMap.forEach((v,i)=>{
     const b=document.createElement("div");
     b.className="bar";
     b.style.height=(v/maxD*100)+"%";
+    b.style.opacity = v > 0 ? "0.85" : "0.25"; // faint empty days
     daily.appendChild(b);
   });
 
-  // X-axis weekly markers
-  for(let i=0;i<days;i+=7){
-    const span=document.createElement("span");
-    span.textContent = `-${days-i}d`;
+  // X-axis labels every 5th day
+  for(let i=0;i<daysInMonth;i++){
+    const span = document.createElement("span");
+  
+    const dayNumber = i + 1;
+  
+    if(
+      dayNumber === 1 ||
+      dayNumber % 5 === 0 ||
+      dayNumber === daysInMonth
+    ){
+      span.textContent = dayNumber;
+    } else {
+      span.textContent = "";
+    }
+  
     dailyXAxis.appendChild(span);
-  }  
+  }
 
   // Finish estimate (simple)
   const totalAll = state.reduce((s,c)=>s+c.current,0);
