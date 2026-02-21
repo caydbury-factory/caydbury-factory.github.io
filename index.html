@@ -346,10 +346,10 @@ input, select, textarea{
 /* ANALYTICS */
 .analytics-shell{
   margin-top:18px;
-  background:linear-gradient(#ffffff,#f3f6f7);
+  background:linear-gradient(160deg,#fcfdfd 0%,#f5f8f9 55%,#eef3f5 100%);
   padding:25px;
-  border-radius:10px;
-  box-shadow:var(--shadow);
+  border-radius:18px;
+  box-shadow:0 18px 40px rgba(14,41,48,.08);
 }
 .analytics-title{
   text-align:center;
@@ -366,13 +366,20 @@ input, select, textarea{
   grid-template-columns:repeat(12, 1fr);
 }
 .kpi{
-  background:white;
-  padding:15px;
-  border-radius:10px;
+  background:linear-gradient(180deg, #ffffff 0%, #fbfcfc 100%);
+  padding:18px;
+  border-radius:18px;
   text-align:left;
   display:flex;
   flex-direction:column;
   min-height:0;
+  border:1px solid rgba(115,168,184,.18);
+  box-shadow:0 10px 26px rgba(14,41,48,.08);
+  transition:transform .2s ease, box-shadow .2s ease;
+}
+.kpi:hover{
+  transform:translateY(-3px);
+  box-shadow:0 16px 34px rgba(14,41,48,.12);
 }
 .kpi .label{
   font-size:12px;
@@ -384,6 +391,12 @@ input, select, textarea{
 .kpi .value{
   font-size:20px;
   font-weight:700;
+  line-height:1.45;
+  color:#173942;
+}
+.kpi .value.narrative{
+  font-size:19px;
+  font-weight:500;
 }
 .kpi--rect{grid-column:span 6; aspect-ratio:16/9;}
 .kpi--square{grid-column:span 4; aspect-ratio:1/1; justify-content:space-between;}
@@ -638,7 +651,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
               <div id="hourlyXAxis" class="chart-xaxis"></div>
              </div>
             </div>
-          <div class="value" id="animalIndicator">—</div>
+          <div class="value narrative" id="animalIndicator">—</div>
         </div>
 
         <div class="kpi kpi--rect">
@@ -656,17 +669,17 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
 
         <div class="kpi kpi--square">
           <div class="label">Average / Session</div>
-          <div class="value"><span id="avgSession">0</span> words</div>
+          <div class="value narrative" id="avgSession">On average, you write 0 words per sitting.</div>
         </div>
 
         <div class="kpi kpi--square">
           <div class="label">Top Location</div>
-          <div class="value" id="topLocation">—</div>
+          <div class="value narrative" id="topLocation">Most often, the work is done at —.</div>
         </div>
 
         <div class="kpi kpi--square">
           <div class="label">When I'll Finish</div>
-          <div class="value" id="finishEstimate">—</div>
+          <div class="value narrative" id="finishEstimate">At this pace, the manuscript may reach completion in — more sittings.</div>
         </div>
 
       </div>
@@ -964,6 +977,16 @@ function updateAnalytics(){
   const chartCap = 5000;
   const chartStep = 1000;
 
+  function formatHourRange(startHour){
+    const start = new Date();
+    const end = new Date();
+    start.setHours(startHour, 0, 0, 0);
+    end.setHours((startHour + 1) % 24, 0, 0, 0);
+    const timeFmt = {hour:"numeric", minute:"2-digit"};
+    const normalize = t => t.replace(" AM", "AM").replace(" PM", "PM");
+    return `${normalize(start.toLocaleTimeString([], timeFmt))} and ${normalize(end.toLocaleTimeString([], timeFmt))}`;
+  }
+
   function renderFixedYAxis(yAxisEl, gridEl){
     for(let value = chartCap; value >= chartStep; value -= chartStep){
       const label = document.createElement("div");
@@ -992,7 +1015,7 @@ function updateAnalytics(){
   // Average per session
   const total=valid.reduce((s,v)=>s+v.words,0);
   const avg=valid.length?Math.round(total/valid.length):0;
-  document.getElementById("avgSession").innerText=avg.toLocaleString();
+  document.getElementById("avgSession").innerText=`On average, you write ${avg.toLocaleString()} words per sitting.`;
 
   // Top location
   const locMap={};
@@ -1001,7 +1024,8 @@ function updateAnalytics(){
   for(const l in locMap){
     if(locMap[l]>max){max=locMap[l];topLoc=l;}
   }
-  document.getElementById("topLocation").innerText=topLoc;
+  const topLocText = topLoc === "—" ? "—" : topLoc.toLowerCase();
+  document.getElementById("topLocation").innerText=`Most often, the work is done at ${topLocText}.`;
 
   // Hourly chart
   const hourMap=new Array(24).fill(0);
@@ -1044,13 +1068,19 @@ function updateAnalytics(){
     hourly.appendChild(makeBar(v));
   });
 
-  const dominant=hourMap.indexOf(Math.max(...hourMap));
-  let animal="—";
-  if(dominant>=5&&dominant<9)animal="Early Bird";
-  else if(dominant>=9&&dominant<12)animal="Hummingbird";
-  else if(dominant>=12&&dominant<17)animal="Lion";
-  else if(dominant>=21||dominant<2)animal="Night Owl";
-  document.getElementById("animalIndicator").innerText=animal;
+  const hasHourlyData = hourMap.some(v=>v>0);
+  let hourlyNarrative = "No writing pattern has emerged yet.";
+  if(hasHourlyData){
+    const dominant=hourMap.indexOf(Math.max(...hourMap));
+    let animal="Steady Scribe";
+    if(dominant>=5&&dominant<9)animal="Early Bird";
+    else if(dominant>=9&&dominant<12)animal="Hummingbird";
+    else if(dominant>=12&&dominant<17)animal="Lion";
+    else if(dominant>=21||dominant<2)animal="Night Owl";
+
+    hourlyNarrative = `You are a ${animal}.\nYour ink flows most faithfully between ${formatHourRange(dominant)}.`;
+  }
+  document.getElementById("animalIndicator").innerText=hourlyNarrative;
 
   // Daily chart (Calendar Month)
   const now = new Date();
@@ -1114,9 +1144,9 @@ function updateAnalytics(){
   let estimate = "—";
   if(avg > 0){
     const sessionsLeft = Math.ceil(remaining / avg);
-    estimate = `${sessionsLeft.toLocaleString()} sessions`;
+    estimate = `${sessionsLeft.toLocaleString()}`;
   }
-  document.getElementById("finishEstimate").innerText = estimate;
+  document.getElementById("finishEstimate").innerText = `At this pace, the manuscript may reach completion in ${estimate} more sittings.`;
 }
 
 /* =========================
