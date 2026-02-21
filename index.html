@@ -387,14 +387,60 @@ input, select, textarea{
 }
 .kpi--rect{grid-column:span 6; aspect-ratio:16/9;}
 .kpi--square{grid-column:span 4; aspect-ratio:1/1; justify-content:space-between;}
+.chart-wrapper{
+  display:flex;
+  height:100%;
+  gap:10px;
+  position:relative;
+}
+
+.chart-yaxis{
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  font-size:11px;
+  color:var(--muted);
+  text-align:right;
+  padding-right:6px;
+  min-width:38px;
+}
+
+.chart-area{
+  flex:1;
+  position:relative;
+  display:flex;
+  flex-direction:column;
+}
+
+.chart-grid{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  pointer-events:none;
+}
+
+.chart-grid div{
+  border-top:1px solid rgba(115,168,184,.12);
+}
+
 .chart{
   display:flex;
   align-items:flex-end;
   gap:3px;
   height:100%;
-  min-height:90px;
-  flex:1;
-  margin-top:4px;
+  min-height:110px;
+  position:relative;
+  z-index:1;
+}
+
+.chart-xaxis{
+  display:flex;
+  justify-content:space-between;
+  font-size:10px;
+  color:var(--muted);
+  margin-top:6px;
 }
 .bar{
   flex:1;
@@ -580,14 +626,29 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
 
         <div class="kpi kpi--rect">
           <div class="label">Hourly Writing Pattern</div>
-          <div id="hourlyChart" class="chart"></div>
+          <div class="chart-wrapper">
+            <div id="hourlyYAxis" class="chart-yaxis"></div>
+            <div class="chart-area">
+              <div id="hourlyGrid" class="chart-grid"></div>
+              <div id="hourlyChart" class="chart"></div>
+              <div id="hourlyXAxis" class="chart-xaxis"></div>
+             </div>
+            </div>
           <div class="value" id="animalIndicator">—</div>
         </div>
 
         <div class="kpi kpi--rect">
           <div class="label">Daily Word Count (This Month)</div>
-          <div id="dailyChart" class="chart"></div>
+          <div class="chart-wrapper">
+            <div id="dailyYAxis" class="chart-yaxis"></div>
+            <div class="chart-area">
+              <div id="dailyGrid" class="chart-grid"></div>
+              <div id="dailyChart" class="chart"></div>
+              <div id="dailyXAxis" class="chart-xaxis"></div>
+            </div>
+          </div>    
         </div>
+          
 
         <div class="kpi kpi--square">
           <div class="label">Average / Session</div>
@@ -920,13 +981,42 @@ function updateAnalytics(){
   });
   const maxH=Math.max(...hourMap,1);
   const hourly=document.getElementById("hourlyChart");
+  const hourlyYAxis = document.getElementById("hourlyYAxis");
+  const hourlyGrid = document.getElementById("hourlyGrid");
+  const hourlyXAxis = document.getElementById("hourlyXAxis");
   hourly.innerHTML="";
+  hourlyYAxis.innerHTML="";
+  hourlyGrid.innerHTML="";
+  hourlyXAxis.innerHTML="";
+
+  // Create subtle 5-step grid
+  const steps = 5;
+  for(let i=0;i<=steps;i++){
+    const value = Math.round((maxH/steps)*(steps-i));
+    const label = document.createElement("div");
+    label.textContent = value.toLocaleString();
+    hourlyYAxis.appendChild(label);
+
+    const line = document.createElement("div");
+    hourlyGrid.appendChild(line);
+  }
+
+  // Bars 
   hourMap.forEach(v=>{
     const b=document.createElement("div");
     b.className="bar";
     b.style.height=(v/maxH*100)+"%";
     hourly.appendChild(b);
   });
+
+  // X-axis labels formatted (5am, 6am, etc.)
+  for(let i=0;i<24;i+=3){
+    const span = document.createElement("span");
+    const date = new Date();
+    date.setHours(i);
+    span.textContent = date.toLocaleTimeString([], {hour:'numeric'});
+    hourlyXAxis.appendChild(span);
+  }  
 
   const dominant=hourMap.indexOf(Math.max(...hourMap));
   let animal="—";
@@ -949,13 +1039,38 @@ function updateAnalytics(){
   });
   const maxD = Math.max(...dayMap,1);
   const daily=document.getElementById("dailyChart");
+  const dailyYAxis = document.getElementById("dailyYAxis");
+  const dailyGrid = document.getElementById("dailyGrid");
+  const dailyXAxis = document.getElementById("dailyXAxis");
   daily.innerHTML="";
+  dailyYAxis.innerHTML="";
+  dailyGrid.innerHTML="";
+  dailyXAxis.innerHTML="";
+
+  for(let i=0;i<=5;i++){
+    const value = Math.round((maxD/5)*(5-i));
+    const label = document.createElement("div");
+    label.textContent = value.toLocaleString();
+    dailyYAxis.appendChild(label);
+
+    const line = document.createElement("div");
+    dailyGrid.appendChild(line);
+  }
+  
+  // Bars  
   dayMap.forEach(v=>{
     const b=document.createElement("div");
     b.className="bar";
     b.style.height=(v/maxD*100)+"%";
     daily.appendChild(b);
   });
+
+  // X-axis weekly markers
+  for(let i=0;i<days;i+=7){
+    const span=document.createElement("span");
+    span.textContent = `-${days-i}d`;
+    dailyXAxis.appendChild(span);
+  }  
 
   // Finish estimate (simple)
   const totalAll = state.reduce((s,c)=>s+c.current,0);
