@@ -989,18 +989,20 @@ function updateAnalytics(){
   hourly.style.gridTemplateColumns = `repeat(24, 1fr)`;
   hourlyXAxis.style.gridTemplateColumns = `repeat(24, 1fr)`;
 
-  // ---- Y AXIS + GRID (5 steps) ----
-  for(let i=0;i<=5;i++){
-    const value = Math.round((maxH/5)*(5-i));
+  // ---- FIXED 0–5K GRID ----
+  const axisMax = 5000;
+  const stepSize = 1000;
+  
+  for(let i = 5; i >= 0; i--){
+    const value = i * stepSize;
   
     const label = document.createElement("div");
-    label.textContent = value.toLocaleString();
+    label.textContent = value === 0 ? "0" : value.toLocaleString();
     hourlyYAxis.appendChild(label);
   
     const line = document.createElement("div");
     hourlyGrid.appendChild(line);
   }
-
 
   // X-axis labels (24 slots, label every 3 hours)
   for(let i=0;i<24;i++){
@@ -1019,9 +1021,19 @@ function updateAnalytics(){
 
   // Bars 
   hourMap.forEach(v=>{
-    const b=document.createElement("div");
-    b.className="bar";
-    b.style.height=(v/maxH*100)+"%";
+    const b = document.createElement("div");
+    b.className = "bar";
+  
+    const cappedValue = Math.min(v, axisMax);
+    b.style.height = (cappedValue / axisMax * 100) + "%";
+  
+    if(v > axisMax){
+      b.style.background = "#ae9a64"; // gold overflow
+    }
+  
+    // Tooltip showing TRUE value
+    b.title = v.toLocaleString() + " words";
+  
     hourly.appendChild(b);
   });
 
@@ -1050,8 +1062,6 @@ function updateAnalytics(){
     }
   });
 
-  const maxD = Math.max(...dayMap, 1);
-
   const daily = document.getElementById("dailyChart");
   const dailyYAxis = document.getElementById("dailyYAxis");
   const dailyGrid = document.getElementById("dailyGrid");
@@ -1065,11 +1075,15 @@ function updateAnalytics(){
   daily.style.gridTemplateColumns = `repeat(${daysInMonth}, 1fr)`;
   dailyXAxis.style.gridTemplateColumns = `repeat(${daysInMonth}, 1fr)`;
   
-  // Subtle 5-step Y grid
-  for(let i=0;i<=5;i++){
-    const value = Math.round((maxD/5)*(5-i));
+  // ---- FIXED 0–5K GRID ----
+  const axisMaxDaily = 5000;
+  const stepSize = 1000;
+  
+  for(let i = 5; i >= 0; i--){
+    const value = i * stepSize;
+  
     const label = document.createElement("div");
-    label.textContent = value.toLocaleString();
+    label.textContent = value === 0 ? "0" : value.toLocaleString();
     dailyYAxis.appendChild(label);
   
     const line = document.createElement("div");
@@ -1078,10 +1092,21 @@ function updateAnalytics(){
   
   // Bars (one per day)
   dayMap.forEach((v,i)=>{
-    const b=document.createElement("div");
-    b.className="bar";
-    b.style.height=(v/maxD*100)+"%";
-    b.style.opacity = v > 0 ? "0.85" : "0.25"; // faint empty days
+    const b = document.createElement("div");
+    b.className = "bar";
+  
+    const cappedValue = Math.min(v, axisMaxDaily);
+    b.style.height = (cappedValue / axisMaxDaily * 100) + "%";
+  
+    if(v > axisMaxDaily){
+      b.style.background = "#ae9a64"; // gold overflow
+    } else {
+      b.style.opacity = v > 0 ? "0.85" : "0.25";
+    }
+  
+    // Tooltip showing TRUE value
+    b.title = v.toLocaleString() + " words";
+  
     daily.appendChild(b);
   });
 
