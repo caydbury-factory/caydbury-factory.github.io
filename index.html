@@ -387,70 +387,20 @@ input, select, textarea{
 }
 .kpi--rect{grid-column:span 6; aspect-ratio:16/9;}
 .kpi--square{grid-column:span 4; aspect-ratio:1/1; justify-content:space-between;}
-.chart-wrapper{
-  display:flex;
-  height:100%;
-  gap:10px;
-  position:relative;
-}
-
-.chart-yaxis{
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-  font-size:11px;
-  color:var(--muted);
-  text-align:right;
-  padding-right:6px;
-  min-width:38px;
-}
-
-.chart-area{
-  flex:1;
-  position:relative;
-  display:flex;
-  flex-direction:column;
-}
-
-.chart-grid{
-  position:absolute;
-  inset:0;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-between;
-  pointer-events:none;
-}
-
-.chart-grid div{
-  border-top:1px solid rgba(115,168,184,.12);
-}
-
 .chart{
-  display:grid;
-  align-items:end;
+  display:flex;
+  align-items:flex-end;
+  gap:3px;
   height:100%;
-  min-height:110px;
-  position:relative;
-  z-index:1;
-}
-
-.chart-xaxis{
-  display:grid;
-  font-size:10px;
-  color:var(--muted);
-  margin-top:6px;
+  min-height:90px;
+  flex:1;
+  margin-top:4px;
 }
 .bar{
+  flex:1;
   background:var(--accent);
   border-radius:3px 3px 0 0;
   opacity:.8;
-  transition:filter .15s ease, transform .12s ease;
-}
-.bar:hover{
-  filter:brightness(1.06);
-}
-.bar.over-cap{
-  background:#ae9a64;
 }
 
 /* MODALS */
@@ -499,19 +449,6 @@ input, select, textarea{
 .author-only { display: none !important; }
 body.edit-mode .author-only { display: inline-block !important; }
 body.edit-mode .panel-head button.author-only { display: block !important; }
-
-/* Author controls layout (keeps your look intact) */
-.author-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.reset-wrap{display:flex;gap:10px;align-items:center}
-button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
-
-/* Tiny toggle switch */
-.switch{position:relative;display:inline-block;width:40px;height:22px}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#dfe8eb;transition:.18s;border-radius:999px;border:1px solid var(--border)}
-.slider:before{position:absolute;content:"";height:16px;width:16px;left:3px;bottom:2px;background:white;transition:.18s;border-radius:999px;box-shadow:0 4px 10px rgba(0,0,0,.10)}
-.switch input:checked + .slider{background:rgba(184,93,93,.28);border-color:rgba(184,93,93,.45)}
-.switch input:checked + .slider:before{transform:translateX(18px)}
 </style>
 </head>
 
@@ -530,16 +467,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
         Word by word. Chapter by chapter.<br>
         No shortcuts. No vanishing drafts.
       </p>
-      <div class="author-controls">
-        <button class="author-only" onclick="openModal()">Author’s Update</button>
-        <div class="author-only reset-wrap" aria-label="Reset controls">
-          <label class="switch" title="Arm reset (testing)">
-            <input type="checkbox" id="resetToggle" onchange="document.getElementById('resetBtn').disabled = !this.checked;">
-            <span class="slider"></span>
-          </label>
-          <button class="btn-mini btn-danger" id="resetBtn" onclick="resetEverything()" disabled>Reset</button>
-        </div>
-      </div>
+      <button class="author-only" onclick="openModal()">Author’s Update</button>
     </div>
   </div>
 </header>
@@ -594,9 +522,32 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
 
             <!-- Procrastination Station tab -->
             <div id="panelPro" role="tabpanel" aria-labelledby="tabPro" hidden>
-              <p style="margin:0 0 12px; color:var(--muted); font-style:italic;">
-                Saved links and notes appear here.
-              </p>
+              <div class="row">
+                <div class="field">
+                  <label for="proTitle">Title</label>
+                  <input id="proTitle" placeholder="Playlist for Chapter 7, article on pacing, etc.">
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="proUrl">Link (optional)</label>
+                  <input id="proUrl" placeholder="https://...">
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="field">
+                  <label for="proNote">Note</label>
+                  <textarea id="proNote" placeholder="Why this matters / where I found it / what it sparked..."></textarea>
+                </div>
+              </div>
+
+              <div class="row" style="justify-content:flex-end">
+                <button class="btn-mini" onclick="saveProcrastinationItem()">Save</button>
+              </div>
+
+              <div class="hr"></div>
 
               <div class="list" id="proList" aria-label="Saved procrastination items"></div>
               <div id="proEmpty" style="display:none; color:var(--muted); font-style:italic; padding:8px 2px;">
@@ -630,29 +581,14 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
 
         <div class="kpi kpi--rect">
           <div class="label">Hourly Writing Pattern</div>
-          <div class="chart-wrapper">
-            <div id="hourlyYAxis" class="chart-yaxis"></div>
-            <div class="chart-area">
-              <div id="hourlyGrid" class="chart-grid"></div>
-              <div id="hourlyChart" class="chart"></div>
-              <div id="hourlyXAxis" class="chart-xaxis"></div>
-             </div>
-            </div>
+          <div id="hourlyChart" class="chart"></div>
           <div class="value" id="animalIndicator">—</div>
         </div>
 
         <div class="kpi kpi--rect">
           <div class="label">Daily Word Count (This Month)</div>
-          <div class="chart-wrapper">
-            <div id="dailyYAxis" class="chart-yaxis"></div>
-            <div class="chart-area">
-              <div id="dailyGrid" class="chart-grid"></div>
-              <div id="dailyChart" class="chart"></div>
-              <div id="dailyXAxis" class="chart-xaxis"></div>
-            </div>
-          </div>    
+          <div id="dailyChart" class="chart"></div>
         </div>
-          
 
         <div class="kpi kpi--square">
           <div class="label">Average / Session</div>
@@ -744,7 +680,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
     </div>
 
     <div class="modal-footer">
-      <button type="button" id="goalSaveBtn">Save</button>
+      <button id="goalSaveBtn" onclick="saveGoal()">Save</button>
       <button class="cancel" onclick="closeGoalModal()">Cancel</button>
     </div>
   </div>
@@ -758,39 +694,6 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
     <div class="modal-footer">
       <button onclick="saveManualNote()">Save</button>
       <button class="cancel" onclick="closeNoteModal()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- NEW MODAL: add procrastination link/note -->
-<div class="modal" id="proModal" role="dialog" aria-modal="true" aria-label="Add procrastination item">
-  <div class="modal-content">
-    <h3>Add Link / Note</h3>
-
-    <div class="row">
-      <div class="field">
-        <label for="proTitle">Title</label>
-        <input id="proTitle" placeholder="Playlist for Chapter 7, article on pacing, etc.">
-      </div>
-    </div>
-
-    <div class="row">
-      <div class="field">
-        <label for="proUrl">Link (optional)</label>
-        <input id="proUrl" placeholder="https://...">
-      </div>
-    </div>
-
-    <div class="row">
-      <div class="field">
-        <label for="proNote">Note</label>
-        <textarea id="proNote" placeholder="Why this matters / where I found it / what it sparked..."></textarea>
-      </div>
-    </div>
-
-    <div class="modal-footer">
-      <button onclick="saveProcrastinationItem()">Save</button>
-      <button class="cancel" onclick="closeProModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -816,41 +719,30 @@ if (mode === 'edit') {
   document.body.classList.add('edit-mode');
 }
 
-let hasLocalMutations = false;
-
-function isEditMode(){
-  return document.body.classList.contains('edit-mode');
-}
-
-function hasLocalSnapshot(){
-  return !!localStorage.getItem(LS_KEY);
-}
-
-async function loadFromCloud() {
-  try {
-    const response = await fetch(
-      SCRIPT_URL + "?t=" + Date.now(),  // ← forces fresh request
-      {
-        method: "GET",
-        cache: "no-store"
-      }
-    );
-
+async function loadFromCloud(){
+  try{
+    const response = await fetch(SCRIPT_URL);
     const data = await response.json();
-    console.log("[Cloud Load] Fresh fetch", data);
 
-    if (data && typeof data === "object") {
-      state = data.state || state;
-      sessions = data.sessions || [];
-      selectedIndex = data.selectedIndex || 0;
-      goals = data.goals || [];
-      proItems = data.proItems || [];
-      activity = data.activity || [];
-      workspaceTab = data.workspaceTab || "goals";
-    }
+    // Only apply if it looks like saved data
+    if(!data || typeof data !== 'object') return false;
 
-  } catch (e) {
-    console.log("Cloud load failed:", e);
+    if(Array.isArray(data.state)) state = data.state;
+    if(Array.isArray(data.sessions)) sessions = data.sessions;
+    if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
+
+    if(Array.isArray(data.goals)) goals = data.goals;
+    if(Array.isArray(data.proItems)) proItems = data.proItems;
+    if(Array.isArray(data.activity)) activity = data.activity;
+    if(typeof data.workspaceTab === 'string') workspaceTab = data.workspaceTab;
+
+    // local backup sync
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+
+    return true;
+  }catch(e){
+    console.log('New site or error loading.');
+    return false;
   }
 }
 
@@ -869,14 +761,14 @@ function refreshUI(){
 const GOAL = 50000;
 
 const carNames = [
-  "Engine",
+  "Engine (Introduction)",
   "Coach (Open) Car",
   "Observation Car",
   "Dining Car",
   "Coach (Compartment) Car",
   "Sleeper Car",
   "Beverage Car",
-  "Tender Engine",
+  "Tender",
   "Lounge Car",
   "Baggage Car",
   "Double Decker Car"
@@ -961,32 +853,6 @@ function submitSession(){
 }
 
 function updateAnalytics(){
-  const chartCap = 5000;
-  const chartStep = 1000;
-
-  function renderFixedYAxis(yAxisEl, gridEl){
-    for(let value = chartCap; value >= chartStep; value -= chartStep){
-      const label = document.createElement("div");
-      label.textContent = `${value/1000}k`;
-      yAxisEl.appendChild(label);
-
-      const line = document.createElement("div");
-      gridEl.appendChild(line);
-    }
-  }
-
-  function makeBar(words){
-    const bar = document.createElement("div");
-    const normalized = Math.min(words, chartCap) / chartCap;
-    bar.className = "bar";
-    if(words > chartCap) bar.classList.add("over-cap");
-    bar.style.height = `${normalized * 100}%`;
-    bar.style.opacity = words > 0 ? "0.85" : "0.25";
-    bar.title = `${words.toLocaleString()} words`;
-    bar.setAttribute("aria-label", `${words.toLocaleString()} words`);
-    return bar;
-  }
-
   const valid=sessions.filter(s=>s.stage!=="Outline");
 
   // Average per session
@@ -1009,39 +875,14 @@ function updateAnalytics(){
     const h=new Date(s.timestamp).getHours();
     hourMap[h]+=s.words;
   });
+  const maxH=Math.max(...hourMap,1);
   const hourly=document.getElementById("hourlyChart");
-  const hourlyYAxis = document.getElementById("hourlyYAxis");
-  const hourlyGrid = document.getElementById("hourlyGrid");
-  const hourlyXAxis = document.getElementById("hourlyXAxis");
   hourly.innerHTML="";
-  hourlyYAxis.innerHTML="";
-  hourlyGrid.innerHTML="";
-  hourlyXAxis.innerHTML="";
-
-  hourly.style.gridTemplateColumns = `repeat(24, 1fr)`;
-  hourlyXAxis.style.gridTemplateColumns = `repeat(24, 1fr)`;
-
-  renderFixedYAxis(hourlyYAxis, hourlyGrid);
-
-
-  // X-axis labels (24 slots, label every 3 hours)
-  for(let i=0;i<24;i++){
-    const span = document.createElement("span");
-  
-    if(i % 3 === 0){
-      const date = new Date();
-      date.setHours(i);
-      span.textContent = date.toLocaleTimeString([], {hour:'numeric'});
-    } else {
-      span.textContent = "";
-    }
-  
-    hourlyXAxis.appendChild(span);
-  }
-
-  // Bars 
   hourMap.forEach(v=>{
-    hourly.appendChild(makeBar(v));
+    const b=document.createElement("div");
+    b.className="bar";
+    b.style.height=(v/maxH*100)+"%";
+    hourly.appendChild(b);
   });
 
   const dominant=hourMap.indexOf(Math.max(...hourMap));
@@ -1052,61 +893,26 @@ function updateAnalytics(){
   else if(dominant>=21||dominant<2)animal="Night Owl";
   document.getElementById("animalIndicator").innerText=animal;
 
-  // Daily chart (Calendar Month)
+  // Daily chart (last 30 days buckets)
+  const days = 30;
+  const dayMap = new Array(days).fill(0);
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-based
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  
-  const dayMap = new Array(daysInMonth).fill(0);
-  
-  // Bucket sessions into correct calendar day
   valid.forEach(s=>{
     const d = new Date(s.timestamp);
-    if(d.getFullYear() === year && d.getMonth() === month){
-      const dayIndex = d.getDate() - 1;
-      dayMap[dayIndex] += s.words;
+    const diff = Math.floor((now - d) / (1000*60*60*24));
+    if(diff >= 0 && diff < days){
+      dayMap[days-1-diff] += s.words;
     }
   });
-
-  const daily = document.getElementById("dailyChart");
-  const dailyYAxis = document.getElementById("dailyYAxis");
-  const dailyGrid = document.getElementById("dailyGrid");
-  const dailyXAxis = document.getElementById("dailyXAxis");
-  
+  const maxD = Math.max(...dayMap,1);
+  const daily=document.getElementById("dailyChart");
   daily.innerHTML="";
-  dailyYAxis.innerHTML="";
-  dailyGrid.innerHTML="";
-  dailyXAxis.innerHTML="";
-
-  daily.style.gridTemplateColumns = `repeat(${daysInMonth}, 1fr)`;
-  dailyXAxis.style.gridTemplateColumns = `repeat(${daysInMonth}, 1fr)`;
-  
-  renderFixedYAxis(dailyYAxis, dailyGrid);
-  
-  // Bars (one per day)
   dayMap.forEach(v=>{
-    daily.appendChild(makeBar(v));
+    const b=document.createElement("div");
+    b.className="bar";
+    b.style.height=(v/maxD*100)+"%";
+    daily.appendChild(b);
   });
-
-  // X-axis labels every 5th day
-  for(let i=0;i<daysInMonth;i++){
-    const span = document.createElement("span");
-  
-    const dayNumber = i + 1;
-  
-    if(
-      dayNumber === 1 ||
-      dayNumber % 5 === 0 ||
-      dayNumber === daysInMonth
-    ){
-      span.textContent = dayNumber;
-    } else {
-      span.textContent = "";
-    }
-  
-    dailyXAxis.appendChild(span);
-  }
 
   // Finish estimate (simple)
   const totalAll = state.reduce((s,c)=>s+c.current,0);
@@ -1148,11 +954,11 @@ function fmtTime(ts){
 }
 function escapeHtml(str){
   return (str ?? "").toString()
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/\"/g,"&quot;")
-    .replace(/'/g,"&#039;");
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }
 
 function addActivity({type, text, system=false, manual=false}){
@@ -1166,7 +972,6 @@ function addActivity({type, text, system=false, manual=false}){
   };
   activity.unshift(entry);
   renderActivity();
-  persistAll();
 }
 
 function renderActivity(){
@@ -1179,9 +984,8 @@ function renderActivity(){
   }
   empty.style.display = "none";
 
-  const isAuthor = isEditMode();
   log.innerHTML = activity.map(e=>{
-    const controls = (isAuthor && e.manual) ? `
+    const controls = e.manual ? `
       <div class="controls">
         <button class="btn-quiet btn-mini" onclick="editManualEntry('${e.id}')">Edit</button>
         <button class="btn-danger btn-mini" onclick="deleteManualEntry('${e.id}')">Delete</button>
@@ -1193,7 +997,7 @@ function renderActivity(){
           <div class="type">${escapeHtml(e.type)}</div>
           <time datetime="${escapeHtml(e.ts)}">${escapeHtml(fmtTime(e.ts))}</time>
         </div>
-        <div class="text">${escapeHtml(e.text).replace(/\n/g,"<br>")}</div>
+        <div class="text">${escapeHtml(e.text).replaceAll("\n","<br>")}</div>
         ${controls}
       </article>
     `;
@@ -1225,7 +1029,10 @@ function switchWorkspaceTab(which){
     panelGoals.hidden = true;
     panelPro.hidden = false;
     btn.textContent = "+ Add Link/Note";
-    btn.onclick = openProModal;
+    btn.onclick = () => {
+      // focus first field in procrastination form
+      document.getElementById("proTitle").focus();
+    };
   }
 }
 
@@ -1233,7 +1040,6 @@ function switchWorkspaceTab(which){
    NEW: goals
 ========================= */
 function openGoalModal(goalId=null){
-  if(!isEditMode()) return;
   editingGoalId = goalId;
   const m = document.getElementById("goalModal");
   const title = document.getElementById("goalModalTitle");
@@ -1279,29 +1085,29 @@ function syncGoalTypeUI(){
   }
 }
 
-function saveGoal(e){
-  if(!isEditMode()) return;
-  if (e && e.preventDefault) e.preventDefault();
-  console.log("EditingGoalId at save:", editingGoalId);
-  console.log("SAVE GOAL FIRED");
-    
+function saveGoal(){
   const name = document.getElementById("goalName").value.trim();
   const type = document.getElementById("goalType").value;
   const notes = document.getElementById("goalNotes").value.trim();
-  const rawTargetWords = parseInt(document.getElementById("goalTargetWords").value, 10);
+  const targetWords = parseInt(document.getElementById("goalTargetWords").value, 10);
   const targetDate = document.getElementById("goalTargetDate").value;
-  const targetWords = Number.isFinite(rawTargetWords) && rawTargetWords > 0 ? rawTargetWords : null;
 
   if(!name){
     alert("Please give the goal a name.");
     return;
   }
-  const now = new Date().toISOString();
-  const targetLabel = type === "words"
-    ? (targetWords ? `${targetWords.toLocaleString()} words` : "no word target yet")
-    : (targetDate ? `by ${targetDate}` : "no date target yet");
+  if(type === "words" && (!Number.isFinite(targetWords) || targetWords <= 0)){
+    alert("Please enter a target word count.");
+    return;
+  }
+  if(type === "date" && !targetDate){
+    alert("Please choose a target date.");
+    return;
+  }
 
-  if(editingGoalId && typeof editingGoalId === "string"){
+  const now = new Date().toISOString();
+
+  if(editingGoalId){
     const idx = goals.findIndex(g=>g.id===editingGoalId);
     if(idx >= 0){
       const prev = goals[idx];
@@ -1309,12 +1115,12 @@ function saveGoal(e){
         ...prev,
         name, type, notes,
         targetWords: type==="words" ? targetWords : null,
-        targetDate: type==="date" ? (targetDate || null) : null,
+        targetDate: type==="date" ? targetDate : null,
         updatedAt: now
       };
       addActivity({
         type:"Goal Edited",
-        text:`${name} (${targetLabel})`,
+        text:`${name} (${type === "words" ? targetWords.toLocaleString()+" words" : "by "+targetDate})`,
         system:true
       });
     }
@@ -1323,17 +1129,16 @@ function saveGoal(e){
       id: uid("goal"),
       name, type, notes,
       targetWords: type==="words" ? targetWords : null,
-      targetDate: type==="date" ? (targetDate || null) : null,
+      targetDate: type==="date" ? targetDate : null,
       active: goals.length ? false : true, // first goal becomes active by default
       createdAt: now,
       updatedAt: now
     };
     goals.unshift(g);
-    console.log("GOALS AFTER PUSH:", goals);
 
     addActivity({
       type:"Goal Created",
-      text:`${name} (${targetLabel})`,
+      text:`${name} (${type === "words" ? targetWords.toLocaleString()+" words" : "by "+targetDate})`,
       system:true
     });
 
@@ -1345,11 +1150,9 @@ function saveGoal(e){
   closeGoalModal();
   renderGoals();
   persistAll();
-  console.info(`[Goals] Saved goal "${name}" (${type}).`);
 }
 
 function setActiveGoal(goalId){
-  if(!isEditMode()) return;
   const g = goals.find(x=>x.id===goalId);
   if(!g) return;
 
@@ -1362,7 +1165,6 @@ function setActiveGoal(goalId){
 }
 
 function deleteGoal(goalId){
-  if(!isEditMode()) return;
   const g = goals.find(x=>x.id===goalId);
   if(!g) return;
 
@@ -1385,19 +1187,12 @@ function deleteGoal(goalId){
 }
 
 function renderGoals(){
-  console.log("GOALS ARRAY:", goals);
-
   const list = document.getElementById("goalsList");
   const empty = document.getElementById("goalsEmpty");
-  const filterSelect = document.getElementById("goalFilter");
-
-  console.log("goalFilter element:", filterSelect);
-
-  const filter = filterSelect ? filterSelect.value : "all";
+  const filter = document.getElementById("goalFilter").value;
 
   const activeGoal = goals.find(g=>g.active);
-  document.getElementById("activeGoalPill").textContent =
-    `Active: ${activeGoal ? activeGoal.name : "—"}`;
+  document.getElementById("activeGoalPill").textContent = `Active: ${activeGoal ? activeGoal.name : "—"}`;
 
   let visible = goals.slice();
   if(filter === "active"){
@@ -1411,37 +1206,27 @@ function renderGoals(){
   }
   empty.style.display = "none";
 
-  const isAuthor = isEditMode();
-
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
-      ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
-      : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
+      ? `Target: ${Number(g.targetWords||0).toLocaleString()} words`
+      : `Target: ${g.targetDate}`;
     const noteLine = g.notes ? ` · ${g.notes}` : "";
-    const toggle = isAuthor
-      ? `<button class="goal-toggle"
-          aria-pressed="${g.active ? "true":"false"}"
-          onclick="setActiveGoal('${g.id}')">
-          ${g.active ? "■" : "□"}
-        </button>`
-      : `<div aria-hidden="true"></div>`;
-    const controls = isAuthor
-      ? `<div class="goal-actions">
-          <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
-          <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
-        </div>`
-      : "";
-
     return `
       <div class="goal-item">
-        ${toggle}
+        <button class="goal-toggle" aria-label="Toggle active goal" aria-pressed="${g.active ? "true":"false"}"
+          onclick="setActiveGoal('${g.id}')">
+          ${g.active ? "■" : "□"}
+        </button>
 
         <div class="goal-meta">
           <div class="name">${escapeHtml(g.name)}</div>
           <div class="sub">${escapeHtml(sub + noteLine)}</div>
         </div>
 
-        ${controls}
+        <div class="goal-actions">
+          <button class="small-link" onclick="openGoalModal('${g.id}')" aria-label="Edit goal">Edit</button>
+          <button class="small-link" onclick="deleteGoal('${g.id}')" aria-label="Delete goal">Delete</button>
+        </div>
       </div>
     `;
   }).join("");
@@ -1451,7 +1236,6 @@ function renderGoals(){
    NEW: Procrastination Station
 ========================= */
 function saveProcrastinationItem(){
-  if(!isEditMode()) return;
   const title = document.getElementById("proTitle").value.trim();
   const url = document.getElementById("proUrl").value.trim();
   const note = document.getElementById("proNote").value.trim();
@@ -1481,24 +1265,12 @@ function saveProcrastinationItem(){
   document.getElementById("proTitle").value="";
   document.getElementById("proUrl").value="";
   document.getElementById("proNote").value="";
-  closeProModal();
 
   renderProItems();
   persistAll();
 }
 
-function openProModal(){
-  if(!isEditMode()) return;
-  document.getElementById("proModal").style.display = "flex";
-  document.getElementById("proTitle").focus();
-}
-
-function closeProModal(){
-  document.getElementById("proModal").style.display = "none";
-}
-
 function deleteProItem(id){
-  if(!isEditMode()) return;
   const item = proItems.find(x=>x.id===id);
   if(!item) return;
   const ok = confirm(`Delete "${item.title}"?`);
@@ -1522,24 +1294,21 @@ function renderProItems(){
   empty.style.display = "none";
 
   list.innerHTML = proItems.map(p=>{
-    const isAuthor = document.body.classList.contains("edit-mode");
-    const cardGrid = isAuthor ? "1fr auto" : "1fr";
     const link = p.url
       ? `<div class="sub"><a href="${escapeHtml(p.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--deep)">${escapeHtml(p.url)}</a></div>`
       : "";
     const note = p.note ? `<div class="sub" style="margin-top:6px">${escapeHtml(p.note)}</div>` : "";
-    const controls = isAuthor
-      ? `<div class="goal-actions"><button class="small-link" onclick="deleteProItem('${p.id}')">Delete</button></div>`
-      : "";
     return `
-      <div class="goal-item" style="grid-template-columns: ${cardGrid};">
+      <div class="goal-item" style="grid-template-columns: 1fr auto;">
         <div class="goal-meta">
           <div class="name">${escapeHtml(p.title)}</div>
           ${link}
           ${note}
           <div class="sub" style="margin-top:8px; color:var(--muted)">Saved: ${escapeHtml(fmtTime(p.createdAt))}</div>
         </div>
-        ${controls}
+        <div class="goal-actions">
+          <button class="small-link" onclick="deleteProItem('${p.id}')">Delete</button>
+        </div>
       </div>
     `;
   }).join("");
@@ -1551,7 +1320,6 @@ function renderProItems(){
 let editingManualLogId = null;
 
 function openNoteModal(existingId=null){
-  if(!isEditMode()) return;
   editingManualLogId = existingId;
   const modal = document.getElementById("noteModal");
   const title = document.getElementById("noteModalTitle");
@@ -1577,7 +1345,6 @@ function closeNoteModal(){
 }
 
 function saveManualNote(){
-  if(!isEditMode()) return;
   const text = document.getElementById("noteText").value.trim();
   if(!text){
     alert("Write something first.");
@@ -1608,11 +1375,9 @@ function saveManualNote(){
 }
 
 function editManualEntry(id){
-  if(!isEditMode()) return;
   openNoteModal(id);
 }
 function deleteManualEntry(id){
-  if(!isEditMode()) return;
   const entry = activity.find(e=>e.id===id);
   if(!entry || !entry.manual) return;
   const ok = confirm("Delete this note?");
@@ -1627,8 +1392,6 @@ function deleteManualEntry(id){
    Persistence
 ========================= */
 function persistAll(){
-  hasLocalMutations = true;
-
   const payload = {
     v: 2,
     state,
@@ -1644,61 +1407,11 @@ function persistAll(){
   localStorage.setItem(LS_KEY, JSON.stringify(payload));
 
   // Cloud save only when author is in edit mode
-  if (isEditMode()) {
+  if (document.body.classList.contains('edit-mode')) {
     fetch(SCRIPT_URL, {
       method: 'POST',
-      // Keep this request "simple" for Google Apps Script CORS compatibility.
-      // Setting application/json forces a preflight that Apps Script web apps
-      // often reject, causing cloud saves to silently fail.
       body: JSON.stringify(payload)
-    })
-    .then(res => {
-      if(!res.ok){
-        console.warn(`[Cloud Save] Failed with status ${res.status}.`);
-      }else{
-        console.info('[Cloud Save] Synced successfully.');
-      }
-    })
-    .catch(()=>console.warn('[Cloud Save] Network error; local copy is still saved.'));
-  }else{
-    console.info('[Local Save] Saved locally only. Use ?mode=edit to sync to cloud.');
-  }
-}
-
-// Author-only: wipe everything for testing
-function resetEverything(){
-  const toggle = document.getElementById('resetToggle');
-  if (toggle && !toggle.checked) {
-    alert('Flip the toggle first to arm the reset.');
-    return;
-  }
-
-  const ok = confirm('RESET EVERYTHING to zero? This clears local + cloud data for this ledger.');
-  if (!ok) return;
-
-  // Reset core manuscript data
-  state = carNames.map(name => ({ name, current: 0, goal: 3000, stage: 'Outline' }));
-  sessions = [];
-  selectedIndex = 0;
-
-  // Reset workspace data
-  goals = [];
-  proItems = [];
-  activity = [];
-  workspaceTab = 'goals';
-
-  // Clear local storage
-  localStorage.removeItem(LS_KEY);
-
-  // Reset UI + save (cloud save only in edit-mode)
-  refreshUI();
-  persistAll();
-
-  // Disarm toggle + disable button again
-  if (toggle) {
-    toggle.checked = false;
-    const btn = document.getElementById('resetBtn');
-    if (btn) btn.disabled = true;
+    }).catch(()=>console.log('Cloud save failed.'));
   }
 }
 
@@ -1724,32 +1437,23 @@ function loadAll(){
 /* =========================
    Boot
 ========================= */
-// Bind goal save button safely (Google Sites compatible)
-document.addEventListener("DOMContentLoaded", function(){
-  const btn = document.getElementById("goalSaveBtn");
-  if(btn){
-    btn.addEventListener("click", () => saveGoal());
-  }
-});
-  
 (async function boot(){
-  await loadFromCloud();   // ALWAYS pull fresh cloud
-
-  // Only use local snapshot in edit mode
-  if (isEditMode()) {
+  const ok = await loadFromCloud();
+  if(!ok){
     loadAll();
   }
-
   refreshUI();
 
-  // Enforce single active goal
-  const active = goals.filter(g => g.active);
-  if (active.length > 1) {
-    const keep = active[0].id;
-    goals.forEach(g => g.active = (g.id === keep));
-    persistAll();
-    renderGoals();
-  }
+   // Ensure we always have at most one active goal (in case of old data)
+  (function enforceSingleActive(){
+    const active = goals.filter(g => g.active);
+    if (active.length > 1) {
+      const keep = active[0].id;
+      goals.forEach(g => g.active = (g.id === keep));
+      persistAll();
+      renderGoals();
+    }
+  })();
 })();
 </script>
 
