@@ -284,6 +284,15 @@ input, select, textarea{
   gap:8px;
   align-items:center;
 }
+.goal-actions-main{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.goal-actions-stack{
+  flex-direction:column;
+  align-items:flex-end;
+}
 .small-link{
   border:none;
   background:transparent;
@@ -1529,6 +1538,38 @@ function setActiveGoal(goalId){
   persistAll();
 }
 
+function toggleGoalCompleted(goalId){
+  if(!isEditMode()) return;
+  const g = goals.find(x=>x.id===goalId);
+  if(!g) return;
+
+  if(!g.completed){
+    const initials = prompt(`Type your initials to complete "${g.name}".`);
+    if(initials === null) return;
+    const cleanInitials = initials.trim().toUpperCase();
+    if(!cleanInitials){
+      alert("Initials are required to complete this goal.");
+      return;
+    }
+    g.completed = true;
+    addActivity({
+      type:"Goal Completed",
+      text:`${g.name} (${cleanInitials})`,
+      system:true
+    });
+  }else{
+    g.completed = false;
+    addActivity({
+      type:"Goal Reopened",
+      text:`${g.name}`,
+      system:true
+    });
+  }
+
+  renderGoals();
+  persistAll();
+}
+
 function deleteGoal(goalId){
   if(!isEditMode()) return;
   const g = goals.find(x=>x.id===goalId);
@@ -1619,9 +1660,12 @@ function renderGoals(){
         </button>`
       : `<div aria-hidden="true"></div>`;
     const controls = isAuthor
-      ? `<div class="goal-actions">
-          <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
-          <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+      ? `<div class="goal-actions goal-actions-stack">
+          <div class="goal-actions-main">
+            <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
+            <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+          </div>
+          <button class="small-link" onclick="toggleGoalCompleted('${g.id}')">${g.completed ? "Undo Complete" : "Complete"}</button>
         </div>`
       : "";
 
