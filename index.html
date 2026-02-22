@@ -1138,54 +1138,68 @@ function updateAnalytics(){
     dailyXAxis.appendChild(span);
   }
 
-  // Finish estimate
-  const MASTER_TARGET = 200000;
-  const activeGoal = goals.find(g=>g.active);
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
-  let targetTotal = MASTER_TARGET;
+  // ===== SMART FINISH PREDICTOR =====
 
+  const MASTER_TARGET = 200000;
+  const activeGoal = goals.find(g => g.active);
+  const totalAll = state.reduce((s,c)=>s+c.current,0);
+  
+  // Determine manuscript target
+  let targetTotal = MASTER_TARGET;
   if(activeGoal && activeGoal.type === "words" && activeGoal.targetWords){
     targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
   }
-
+  
   const remaining = Math.max(0, targetTotal - totalAll);
-
-  const daysWritten = dayMap.filter(v=>v>0).length;
-  const totalThisMonth = dayMap.reduce((s,v)=>s+v,0);
-  const avgPerDay = daysWritten ? (totalThisMonth / daysWritten) : 0;
-
+  
+  // ALL sessions count (Outline included)
+  const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
+  
+  const uniqueDays = new Set(
+    sessions.map(s => new Date(s.timestamp).toDateString())
+  ).size;
+  
+  const avgPerDay = uniqueDays > 0
+    ? totalWordsEver / uniqueDays
+    : 0;
+  
   let line1 = "—";
   let line2 = "";
-
-  if(valid.length > 0){
-    if(activeGoal && activeGoal.type === "date" && activeGoal.targetDate){
-      const targetDate = new Date(activeGoal.targetDate);
-      const msPerDay = 24 * 60 * 60 * 1000;
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      targetDate.setHours(0,0,0,0);
-      const daysLeft = Math.ceil((targetDate - today) / msPerDay);
-
-      if(daysLeft > 0){
-        const neededPerDay = Math.ceil(remaining / daysLeft);
-        line1 = targetDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
-        line2 = `To meet goal: ${neededPerDay.toLocaleString()} words/day`;
-      }
-    } else if(avgPerDay > 0){
-      const daysNeeded = Math.ceil(remaining / avgPerDay);
-      const finishDate = new Date();
-      finishDate.setDate(finishDate.getDate() + daysNeeded);
-      line1 = finishDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
-      line2 = `At current pace: ${Math.round(avgPerDay).toLocaleString()} words/day`;
+  
+  if(totalAll >= targetTotal){
+    line1 = "Complete";
+    line2 = "Manuscript target achieved.";
+  }
+  else if(activeGoal && activeGoal.type === "date" && activeGoal.targetDate){
+  
+    const targetDate = new Date(activeGoal.targetDate);
+    const today = new Date();
+    const msPerDay = 86400000;
+  
+    const daysLeft = Math.ceil((targetDate - today) / msPerDay);
+  
+    if(daysLeft > 0){
+      const neededPerDay = Math.ceil(remaining / daysLeft);
+      line1 = targetDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
+      line2 = `To meet goal: ${neededPerDay.toLocaleString()} words/day · Current pace: ${Math.round(avgPerDay).toLocaleString()}/day`;
     }
   }
-
+  else if(avgPerDay > 0){
+  
+    const daysNeeded = Math.ceil(remaining / avgPerDay);
+    const finishDate = new Date();
+    finishDate.setDate(finishDate.getDate() + daysNeeded);
+  
+    line1 = finishDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
+    line2 = `Cross-check: ${Math.round(avgPerDay).toLocaleString()} words/day`;
+  }
+  
   document.getElementById("finishEstimate").innerHTML = `
-  ${line1}
-  <div style="font-size:13px; color:var(--muted); margin-top:6px;">
-    ${line2}
-  </div>
-`;
+    ${line1}
+    <div style="font-size:13px; color:var(--muted); margin-top:6px;">
+      ${line2}
+    </div>
+  `;
 }
 
 /* =========================
