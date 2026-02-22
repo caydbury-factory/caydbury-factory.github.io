@@ -791,6 +791,11 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
         </select>
       </div>
 
+      <div class="field" id="goalScopeField">
+        <label for="goalScope">Applies to</label>
+        <select id="goalScope"></select>
+      </div>
+
       <div class="field" id="goalWordsField">
         <label for="goalTargetWords">Target words</label>
         <input id="goalTargetWords" type="number" min="1" placeholder="2500">
@@ -951,6 +956,21 @@ const carNames = [
 let state = carNames.map(name=>({name,current:0,goal:3000,stage:"Outline"}));
 let sessions = [];
 let selectedIndex=0;
+
+function getGoalScopeWords(goal){
+  const scope = goal?.scope || "all";
+  if(scope === "all"){
+    return state.reduce((sum,car)=>sum + (Number(car.current) || 0),0);
+  }
+  const scopedCar = state.find(car => car.name === scope);
+  return scopedCar ? (Number(scopedCar.current) || 0) : 0;
+}
+
+function ensureGoalScopeOptions(){
+  const select = document.getElementById("goalScope");
+  if(!select) return;
+  select.innerHTML = [`<option value="all">Entire Manuscript</option>`, ...carNames.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)].join("");
+}
 
 function renderCars(){
   const container=document.getElementById("carsContainer");
@@ -1242,7 +1262,8 @@ function updateAnalytics(){
     targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
   }
   
-  const remaining = Math.max(0, targetTotal - totalAll);
+  const activeScopedTotal = activeGoal ? getGoalScopeWords(activeGoal) : totalAll;
+  const remaining = Math.max(0, targetTotal - activeScopedTotal);
   
   // ALL sessions count (Outline included)
   const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
@@ -1419,6 +1440,8 @@ function openGoalModal(goalId=null){
   document.getElementById("goalTargetWords").value = "";
   document.getElementById("goalTargetDate").value = "";
   document.getElementById("goalNotes").value = "";
+  ensureGoalScopeOptions();
+  document.getElementById("goalScope").value = "all";
 
   if(goalId){
     const g = goals.find(x=>x.id===goalId);
@@ -1429,6 +1452,7 @@ function openGoalModal(goalId=null){
       document.getElementById("goalTargetWords").value = g.targetWords ?? "";
       document.getElementById("goalTargetDate").value = g.targetDate ?? "";
       document.getElementById("goalNotes").value = g.notes || "";
+      document.getElementById("goalScope").value = g.scope || "all";
     }
   }else{
     title.textContent = "New Goal";
@@ -1465,6 +1489,7 @@ function saveGoal(e){
   const notes = document.getElementById("goalNotes").value.trim();
   const rawTargetWords = parseInt(document.getElementById("goalTargetWords").value, 10);
   const targetDate = document.getElementById("goalTargetDate").value;
+  const scope = document.getElementById("goalScope").value || "all";
   const targetWords = Number.isFinite(rawTargetWords) && rawTargetWords > 0 ? rawTargetWords : null;
 
   if(!name){
@@ -1472,17 +1497,21 @@ function saveGoal(e){
     return;
   }
   const now = new Date().toISOString();
+  const scopeLabel = scope === "all" ? "Entire Manuscript" : scope;
   const targetLabel = type === "words"
-    ? (targetWords ? `${targetWords.toLocaleString()} words` : "no word target yet")
+    ? (targetWords ? `${targetWords.toLocaleString()} words · ${scopeLabel}` : `no word target yet · ${scopeLabel}`)
     : (targetDate ? `by ${targetDate}` : "no date target yet");
 
   if(editingGoalId && typeof editingGoalId === "string"){
     const idx = goals.findIndex(g=>g.id===editingGoalId);
     if(idx >= 0){
       const prev = goals[idx];
+      const scopeChanged = (prev.scope || "all") !== scope;
+      const targetChanged = (prev.targetWords ?? null) !== (type==="words" ? targetWords : null);
       goals[idx] = {
         ...prev,
         name, type, notes,
+        scope,
         targetWords: type==="words" ? targetWords : null,
         targetDate: type==="date" ? (targetDate || null) : null,
         completed: prev.completed ?? false,
@@ -1498,6 +1527,7 @@ function saveGoal(e){
     const g = {
       id: uid("goal"),
       name, type, notes,
+      scope,
       targetWords: type==="words" ? targetWords : null,
       targetDate: type==="date" ? (targetDate || null) : null,
       active: goals.length ? false : true, // first goal becomes active by default
