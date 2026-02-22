@@ -675,7 +675,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
           <div class="panel-head">
             <div class="heading">Activity Log</div>
                         <div style="display:flex; gap:8px;">
-              <button class="btn-mini author-only" onclick="runActivityCorrections()">Corrections</button>
+              <button class="btn-mini author-only" id="correctionsBtn" onclick="runActivityCorrections()">Corrections</button>
               <button class="btn-mini author-only" onclick="openNoteModal()">+ Note</button>
             </div>
           </div>
@@ -1338,6 +1338,8 @@ let proItems = []; // {id,title,url,note,createdAt}
 
 // Activity log
 let activity = []; // {id, type, text, ts, system:boolean, manual:boolean}
+let correctionSelectionMode = false;
+let correctionSelectedIds = new Set();
 
 /* =========================
    NEW: activity logging
@@ -1372,16 +1374,45 @@ function addActivity({type, text, system=false, manual=false}){
   persistAll();
 }
 
+function updateCorrectionsButton(){
+  const btn = document.getElementById("correctionsBtn");
+  if(!btn) return;
+  btn.textContent = correctionSelectionMode ? "Apply Corrections" : "Corrections";
+}
+
+function toggleCorrectionSelection(entryId, checked){
+  if(checked){
+    correctionSelectedIds.add(entryId);
+  }else{
+    correctionSelectedIds.delete(entryId);
+  }
+}
+
 function runActivityCorrections(){
   if(!isEditMode()) return;
 
-  const autoEntries = activity.filter(e => e.type === "Goal Completed (Auto)");
-  if(!autoEntries.length){
-    alert("No auto-complete goal events found to correct.");
+    if(!correctionSelectionMode){
+    if(!activity.length){
+      alert("No activity entries found to correct.");
+      return;
+    }
+    correctionSelectionMode = true;
+    correctionSelectedIds = new Set();
+    updateCorrectionsButton();
+    renderActivity();
     return;
   }
 
-  const initials = prompt(`Type your initials to remove ${autoEntries.length} auto-complete event${autoEntries.length===1?"":"s"}.`);
+  const selected = activity.filter(e => correctionSelectedIds.has(e.id));
+  if(!selected.length){
+    correctionSelectionMode = false;
+    correctionSelectedIds = new Set();
+    updateCorrectionsButton();
+    renderActivity();
+    return;
+  }
+
+  const initials = prompt(`Type your initials to remove ${selected.length} selected activit${selected.length===1?"y":"ies"}.`);
   if(initials === null) return;
 
   const cleanInitials = initials.trim().toUpperCase();
@@ -1390,15 +1421,26 @@ function runActivityCorrections(){
     return;
   }
 
-  const ok = confirm(`Corrections will remove ${autoEntries.length} auto-complete event${autoEntries.length===1?"":"s"}. Continue?`);
+  const ok = confirm(`Corrections will remove ${selected.length} selected activit${selected.length===1?"y":"ies"}. Continue?`);
   if(!ok) return;
-
-  activity = activity.filter(e => e.type !== "Goal Completed (Auto)");
+  
+  // Remove ONLY selected entries
+  activity = activity.filter(e => !correctionSelectedIds.has(e.id));
+  
+  // Reset correction mode
+  correctionSelectionMode = false;
+  correctionSelectedIds = new Set();
+  
+  // Log the correction  
   addActivity({
     type:"Corrections",
-    text:`Removed ${autoEntries.length} auto-complete event${autoEntries.length===1?"":"s"} (${cleanInitials})`,
+    text:`Removed ${selected.length} selected activit${selected.length===1?"y":"ies"} (${cleanInitials})`,
     system:true
   });
+  
+  // Re-render + persist
+  renderActivity();
+  persistAll();
 }
 
 function renderActivity(){
@@ -1407,11 +1449,13 @@ function renderActivity(){
   if(!activity.length){
     log.innerHTML = "";
     empty.style.display = "block";
+	updateCorrectionsButton();
     return;
   }
   empty.style.display = "none";
 
   const isAuthor = isEditMode();
+  updateCorrectionsButton();
   log.innerHTML = activity.map(e=>{
     const controls = (isAuthor && e.manual) ? `
       <div class="controls">
@@ -1419,10 +1463,16 @@ function renderActivity(){
         <button class="btn-danger btn-mini" onclick="deleteManualEntry('${e.id}')">Delete</button>
       </div>
     ` : "";
+	    const selector = (isAuthor && correctionSelectionMode) ? `
+      <label style="display:inline-flex; align-items:center; gap:6px; margin-left:10px; font-size:12px; color:var(--muted);">
+        <input type="checkbox" ${correctionSelectedIds.has(e.id) ? "checked" : ""} onchange="toggleCorrectionSelection('${e.id}', this.checked)">
+        Select
+      </label>
+    ` : "";
     return `
       <article class="log-entry" aria-label="Activity entry">
         <div class="top">
-          <div class="type">${escapeHtml(e.type)}</div>
+          <div class="type">${escapeHtml(e.type)}${selector}</div>
           <time datetime="${escapeHtml(e.ts)}">${escapeHtml(fmtTime(e.ts))}</time>
         </div>
         <div class="text">${escapeHtml(e.text).replace(/\n/g,"<br>")}</div>
