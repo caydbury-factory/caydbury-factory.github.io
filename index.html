@@ -284,6 +284,15 @@ input, select, textarea{
   gap:8px;
   align-items:center;
 }
+.goal-actions-main{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.goal-actions-stack{
+  flex-direction:column;
+  align-items:flex-end;
+}
 .small-link{
   border:none;
   background:transparent;
@@ -293,6 +302,25 @@ input, select, textarea{
   border-radius:8px;
 }
 .small-link:hover{background:rgba(115,168,184,.12)}
+
+.goal-status {
+  font-weight:600;
+  margin-left:6px;
+}
+
+.goal-status-complete {
+  color:#4b8f5b;
+}
+
+.goal-status-behind {
+  color:#b85d5d;
+  font-weight:700;
+}
+
+
+.goal-finished {
+  opacity:.6;
+}
 
 /* Activity log */
 .log{
@@ -1181,7 +1209,28 @@ function updateAnalytics(){
 
   const MASTER_TARGET = 200000;
   const activeGoal = goals.find(g => g.active);
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
+
+  let goalsAutoUpdated = false;
+  goals.forEach(goal => {
+    if(
+      !goal.completed &&
+      goal.type === "words" &&
+      goal.targetWords &&
+      totalAll >= goal.targetWords
+    ){
+      goal.completed = true;
+      goalsAutoUpdated = true;
+      addActivity({
+        type:"Goal Completed (Auto)",
+        text: goal.name,
+        system:true
+      });
+    }
+  });
+  if(goalsAutoUpdated){
+    persistAll();
+    renderGoals();
+  }
   
   // Determine manuscript target
   let targetTotal = MASTER_TARGET;
@@ -1249,7 +1298,7 @@ const LS_KEY = "manuscriptLedger.v2";
 let workspaceTab = "goals";
 
 // Goals
-let goals = []; // {id, name, type:'words'|'date', targetWords?, targetDate?, notes, active:boolean, createdAt, updatedAt}
+let goals = []; // {id, name, type:'words'|'date', targetWords?, targetDate?, notes, active:boolean, completed:boolean, createdAt, updatedAt}
 let editingGoalId = null;
 
 // Procrastination items
@@ -1432,6 +1481,7 @@ function saveGoal(e){
         name, type, notes,
         targetWords: type==="words" ? targetWords : null,
         targetDate: type==="date" ? (targetDate || null) : null,
+        completed: prev.completed ?? false,
         updatedAt: now
       };
       addActivity({
@@ -1447,6 +1497,7 @@ function saveGoal(e){
       targetWords: type==="words" ? targetWords : null,
       targetDate: type==="date" ? (targetDate || null) : null,
       active: goals.length ? false : true, // first goal becomes active by default
+      completed: false,
       createdAt: now,
       updatedAt: now
     };
@@ -1478,6 +1529,38 @@ function setActiveGoal(goalId){
   // single-active rule: turn off all others
   goals.forEach(x => x.active = (x.id === goalId));
   addActivity({ type:"Active Goal Set", text:`${g.name}`, system:true });
+
+  renderGoals();
+  persistAll();
+}
+
+function toggleGoalCompleted(goalId){
+  if(!isEditMode()) return;
+  const g = goals.find(x=>x.id===goalId);
+  if(!g) return;
+
+  if(!g.completed){
+    const initials = prompt(`Type your initials to complete "${g.name}".`);
+    if(initials === null) return;
+    const cleanInitials = initials.trim().toUpperCase();
+    if(!cleanInitials){
+      alert("Initials are required to complete this goal.");
+      return;
+    }
+    g.completed = true;
+    addActivity({
+      type:"Goal Completed",
+      text:`${g.name} (${cleanInitials})`,
+      system:true
+    });
+  }else{
+    g.completed = false;
+    addActivity({
+      type:"Goal Reopened",
+      text:`${g.name}`,
+      system:true
+    });
+  }
 
   renderGoals();
   persistAll();
@@ -1534,12 +1617,33 @@ function renderGoals(){
   empty.style.display = "none";
 
   const isAuthor = isEditMode();
+  const today = new Date();
+  today.setHours(0,0,0,0);
 
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
       ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
       : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
     const noteLine = g.notes ? ` · ${g.notes}` : "";
+    let statusText = "";
+    let statusClass = "";
+
+    if(g.completed){
+      statusText = "Completed";
+      statusClass = "goal-status-complete";
+    }else if(g.type === "date" && g.targetDate){
+      const targetDate = new Date(g.targetDate);
+      targetDate.setHours(0,0,0,0);
+      if(today > targetDate){
+        const daysBehind = Math.ceil((today - targetDate) / 86400000);
+        statusText = `${daysBehind} ${daysBehind === 1 ? "day" : "days"} behind`;
+        statusClass = "goal-status-behind";
+      }
+    }
+
+    const statusMarkup = statusText
+      ? `<span class="goal-status ${statusClass}">${escapeHtml(statusText)}</span>`
+      : "";
     const toggle = isAuthor
       ? `<button class="goal-toggle"
           aria-pressed="${g.active ? "true":"false"}"
@@ -1548,18 +1652,21 @@ function renderGoals(){
         </button>`
       : `<div aria-hidden="true"></div>`;
     const controls = isAuthor
-      ? `<div class="goal-actions">
-          <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
-          <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+      ? `<div class="goal-actions goal-actions-stack">
+          <div class="goal-actions-main">
+            <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
+            <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+          </div>
+          <button class="small-link" onclick="toggleGoalCompleted('${g.id}')">${g.completed ? "Undo Complete" : "Complete"}</button>
         </div>`
       : "";
 
     return `
-      <div class="goal-item">
+      <div class="goal-item ${g.completed ? "goal-finished" : ""}">
         ${toggle}
 
         <div class="goal-meta">
-          <div class="name">${escapeHtml(g.name)}</div>
+          <div class="name">${escapeHtml(g.name)}${statusMarkup}</div>
           <div class="sub">${escapeHtml(sub + noteLine)}</div>
         </div>
 
