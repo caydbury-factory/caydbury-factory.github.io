@@ -674,7 +674,10 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
         <aside class="panel" aria-label="Activity log">
           <div class="panel-head">
             <div class="heading">Activity Log</div>
-            <button class="btn-mini author-only" onclick="openNoteModal()">+ Note</button>
+                        <div style="display:flex; gap:8px;">
+              <button class="btn-mini author-only" onclick="runActivityCorrections()">Corrections</button>
+              <button class="btn-mini author-only" onclick="openNoteModal()">+ Note</button>
+            </div>
           </div>
 
           <div class="panel-body">
@@ -1234,27 +1237,31 @@ function updateAnalytics(){
   const activeGoal = goals.find(g => g.active);
   const totalAll = state.reduce((s,c)=>s+c.current,0);
 
+  // ===== AUTO COMPLETE WORD GOALS (Scoped) =====
   let goalsAutoUpdated = false;
+  
   goals.forEach(goal => {
+  
     if(
       !goal.completed &&
       goal.type === "words" &&
-      goal.targetWords &&
-      totalAll >= goal.targetWords
+      goal.targetWords
     ){
-      goal.completed = true;
-      goalsAutoUpdated = true;
-      addActivity({
-        type:"Goal Completed (Auto)",
-        text: goal.name,
-        system:true
-      });
+  
+      const scopedTotal = getGoalScopeWords(goal);
+  
+      if(scopedTotal >= Number(goal.targetWords)){
+        goal.completed = true;
+        goalsAutoUpdated = true;
+  
+        addActivity({
+          type:"Goal Completed (Auto)",
+          text: goal.name,
+          system:true
+        });
+      }
     }
   });
-  if(goalsAutoUpdated){
-    persistAll();
-    renderGoals();
-  }
   
   // Determine manuscript target
   let targetTotal = MASTER_TARGET;
@@ -1363,6 +1370,35 @@ function addActivity({type, text, system=false, manual=false}){
   activity.unshift(entry);
   renderActivity();
   persistAll();
+}
+
+function runActivityCorrections(){
+  if(!isEditMode()) return;
+
+  const autoEntries = activity.filter(e => e.type === "Goal Completed (Auto)");
+  if(!autoEntries.length){
+    alert("No auto-complete goal events found to correct.");
+    return;
+  }
+
+  const initials = prompt(`Type your initials to remove ${autoEntries.length} auto-complete event${autoEntries.length===1?"":"s"}.`);
+  if(initials === null) return;
+
+  const cleanInitials = initials.trim().toUpperCase();
+  if(!cleanInitials){
+    alert("Initials are required for Corrections.");
+    return;
+  }
+
+  const ok = confirm(`Corrections will remove ${autoEntries.length} auto-complete event${autoEntries.length===1?"":"s"}. Continue?`);
+  if(!ok) return;
+
+  activity = activity.filter(e => e.type !== "Goal Completed (Auto)");
+  addActivity({
+    type:"Corrections",
+    text:`Removed ${autoEntries.length} auto-complete event${autoEntries.length===1?"":"s"} (${cleanInitials})`,
+    system:true
+  });
 }
 
 function renderActivity(){
