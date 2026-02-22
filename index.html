@@ -317,6 +317,9 @@ input, select, textarea{
   font-weight:700;
 }
 
+.goal-status-ready {
+  color:#ae9a64;
+}
 
 .goal-finished {
   opacity:.6;
@@ -1229,23 +1232,21 @@ function updateAnalytics(){
 
   const MASTER_TARGET = 200000;
   const activeGoal = goals.find(g => g.active);
-  const totalAll = state.reduce((s,c)=>s+(Number(c.current)||0),0);
+  const totalAll = state.reduce((s,c)=>s+c.current,0);
 
   let goalsAutoUpdated = false;
   goals.forEach(goal => {
-    const scopedTotal = getGoalScopeWords(goal);
     if(
       !goal.completed &&
-      !goal.autoCompleteBlocked &&
       goal.type === "words" &&
       goal.targetWords &&
-      scopedTotal >= goal.targetWords
+      totalAll >= goal.targetWords
     ){
       goal.completed = true;
       goalsAutoUpdated = true;
       addActivity({
         type:"Goal Completed (Auto)",
-        text: `${goal.name} (${goal.scope && goal.scope !== "all" ? goal.scope : "Entire Manuscript"})`,
+        text: goal.name,
         system:true
       });
     }
@@ -1322,7 +1323,7 @@ const LS_KEY = "manuscriptLedger.v2";
 let workspaceTab = "goals";
 
 // Goals
-let goals = []; // {id, name, type:'words'|'date', scope:'all'|chapterName, targetWords?, targetDate?, notes, active:boolean, completed:boolean, autoCompleteBlocked:boolean, createdAt, updatedAt}
+let goals = []; // {id, name, type:'words'|'date', targetWords?, targetDate?, notes, active:boolean, completed:boolean, createdAt, updatedAt}
 let editingGoalId = null;
 
 // Procrastination items
@@ -1514,7 +1515,6 @@ function saveGoal(e){
         targetWords: type==="words" ? targetWords : null,
         targetDate: type==="date" ? (targetDate || null) : null,
         completed: prev.completed ?? false,
-        autoCompleteBlocked: (scopeChanged || targetChanged || type !== prev.type) ? false : (prev.autoCompleteBlocked ?? false),
         updatedAt: now
       };
       addActivity({
@@ -1532,7 +1532,6 @@ function saveGoal(e){
       targetDate: type==="date" ? (targetDate || null) : null,
       active: goals.length ? false : true, // first goal becomes active by default
       completed: false,
-      autoCompleteBlocked: false,
       createdAt: now,
       updatedAt: now
     };
@@ -1583,7 +1582,6 @@ function toggleGoalCompleted(goalId){
       return;
     }
     g.completed = true;
-    g.autoCompleteBlocked = false;
     addActivity({
       type:"Goal Completed",
       text:`${g.name} (${cleanInitials})`,
@@ -1591,7 +1589,6 @@ function toggleGoalCompleted(goalId){
     });
   }else{
     g.completed = false;
-    g.autoCompleteBlocked = true;
     addActivity({
       type:"Goal Reopened",
       text:`${g.name}`,
@@ -1654,6 +1651,7 @@ function renderGoals(){
   empty.style.display = "none";
 
   const isAuthor = isEditMode();
+  const totalAll = state.reduce((s,c)=>s+c.current,0);
   const today = new Date();
   today.setHours(0,0,0,0);
 
@@ -1661,8 +1659,7 @@ function renderGoals(){
     const sub = g.type === "words"
       ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
       : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
-    const scopeLabel = g.scope && g.scope !== "all" ? g.scope : "Entire Manuscript";
-    const noteLine = `${g.notes ? ` · ${g.notes}` : ""} · Applies to: ${scopeLabel}`;
+    const noteLine = g.notes ? ` · ${g.notes}` : "";
     let statusText = "";
     let statusClass = "";
 
@@ -1677,6 +1674,9 @@ function renderGoals(){
         statusText = `${daysBehind} ${daysBehind === 1 ? "day" : "days"} behind`;
         statusClass = "goal-status-behind";
       }
+    }else if(g.type === "words" && g.targetWords && totalAll >= Number(g.targetWords)){
+      statusText = "Ready to Complete";
+      statusClass = "goal-status-ready";
     }
 
     const statusMarkup = statusText
