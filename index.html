@@ -317,6 +317,9 @@ input, select, textarea{
   font-weight:700;
 }
 
+.goal-status-ready {
+  color:#ae9a64;
+}
 
 .goal-finished {
   opacity:.6;
@@ -1209,6 +1212,7 @@ function updateAnalytics(){
 
   const MASTER_TARGET = 200000;
   const activeGoal = goals.find(g => g.active);
+  const totalAll = state.reduce((s,c)=>s+c.current,0);
 
   let goalsAutoUpdated = false;
   goals.forEach(goal => {
@@ -1617,6 +1621,7 @@ function renderGoals(){
   empty.style.display = "none";
 
   const isAuthor = isEditMode();
+  const totalAll = state.reduce((s,c)=>s+c.current,0);
   const today = new Date();
   today.setHours(0,0,0,0);
 
@@ -1639,6 +1644,9 @@ function renderGoals(){
         statusText = `${daysBehind} ${daysBehind === 1 ? "day" : "days"} behind`;
         statusClass = "goal-status-behind";
       }
+    }else if(g.type === "words" && g.targetWords && totalAll >= Number(g.targetWords)){
+      statusText = "Ready to Complete";
+      statusClass = "goal-status-ready";
     }
 
     const statusMarkup = statusText
