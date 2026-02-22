@@ -284,6 +284,15 @@ input, select, textarea{
   gap:8px;
   align-items:center;
 }
+.goal-actions-main{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.goal-actions-stack{
+  flex-direction:column;
+  align-items:flex-end;
+}
 .small-link{
   border:none;
   background:transparent;
@@ -293,6 +302,25 @@ input, select, textarea{
   border-radius:8px;
 }
 .small-link:hover{background:rgba(115,168,184,.12)}
+
+.goal-status {
+  font-weight:600;
+  margin-left:6px;
+}
+
+.goal-status-complete {
+  color:#4b8f5b;
+}
+
+.goal-status-behind {
+  color:#b85d5d;
+  font-weight:700;
+}
+
+
+.goal-finished {
+  opacity:.6;
+}
 
 /* Activity log */
 .log{
@@ -760,6 +788,11 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
         </select>
       </div>
 
+      <div class="field" id="goalScopeField">
+        <label for="goalScope">Applies to</label>
+        <select id="goalScope"></select>
+      </div>
+
       <div class="field" id="goalWordsField">
         <label for="goalTargetWords">Target words</label>
         <input id="goalTargetWords" type="number" min="1" placeholder="2500">
@@ -920,6 +953,21 @@ const carNames = [
 let state = carNames.map(name=>({name,current:0,goal:3000,stage:"Outline"}));
 let sessions = [];
 let selectedIndex=0;
+
+function getGoalScopeWords(goal){
+  const scope = goal?.scope || "all";
+  if(scope === "all"){
+    return state.reduce((sum,car)=>sum + (Number(car.current) || 0),0);
+  }
+  const scopedCar = state.find(car => car.name === scope);
+  return scopedCar ? (Number(scopedCar.current) || 0) : 0;
+}
+
+function ensureGoalScopeOptions(){
+  const select = document.getElementById("goalScope");
+  if(!select) return;
+  select.innerHTML = [`<option value="all">Entire Manuscript</option>`, ...carNames.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)].join("");
+}
 
 function renderCars(){
   const container=document.getElementById("carsContainer");
@@ -1181,7 +1229,31 @@ function updateAnalytics(){
 
   const MASTER_TARGET = 200000;
   const activeGoal = goals.find(g => g.active);
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
+  const totalAll = state.reduce((s,c)=>s+(Number(c.current)||0),0);
+
+  let goalsAutoUpdated = false;
+  goals.forEach(goal => {
+    const scopedTotal = getGoalScopeWords(goal);
+    if(
+      !goal.completed &&
+      !goal.autoCompleteBlocked &&
+      goal.type === "words" &&
+      goal.targetWords &&
+      scopedTotal >= goal.targetWords
+    ){
+      goal.completed = true;
+      goalsAutoUpdated = true;
+      addActivity({
+        type:"Goal Completed (Auto)",
+        text: `${goal.name} (${goal.scope && goal.scope !== "all" ? goal.scope : "Entire Manuscript"})`,
+        system:true
+      });
+    }
+  });
+  if(goalsAutoUpdated){
+    persistAll();
+    renderGoals();
+  }
   
   // Determine manuscript target
   let targetTotal = MASTER_TARGET;
@@ -1189,7 +1261,8 @@ function updateAnalytics(){
     targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
   }
   
-  const remaining = Math.max(0, targetTotal - totalAll);
+  const activeScopedTotal = activeGoal ? getGoalScopeWords(activeGoal) : totalAll;
+  const remaining = Math.max(0, targetTotal - activeScopedTotal);
   
   // ALL sessions count (Outline included)
   const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
@@ -1249,7 +1322,7 @@ const LS_KEY = "manuscriptLedger.v2";
 let workspaceTab = "goals";
 
 // Goals
-let goals = []; // {id, name, type:'words'|'date', targetWords?, targetDate?, notes, active:boolean, createdAt, updatedAt}
+let goals = []; // {id, name, type:'words'|'date', scope:'all'|chapterName, targetWords?, targetDate?, notes, active:boolean, completed:boolean, autoCompleteBlocked:boolean, createdAt, updatedAt}
 let editingGoalId = null;
 
 // Procrastination items
@@ -1366,6 +1439,8 @@ function openGoalModal(goalId=null){
   document.getElementById("goalTargetWords").value = "";
   document.getElementById("goalTargetDate").value = "";
   document.getElementById("goalNotes").value = "";
+  ensureGoalScopeOptions();
+  document.getElementById("goalScope").value = "all";
 
   if(goalId){
     const g = goals.find(x=>x.id===goalId);
@@ -1376,6 +1451,7 @@ function openGoalModal(goalId=null){
       document.getElementById("goalTargetWords").value = g.targetWords ?? "";
       document.getElementById("goalTargetDate").value = g.targetDate ?? "";
       document.getElementById("goalNotes").value = g.notes || "";
+      document.getElementById("goalScope").value = g.scope || "all";
     }
   }else{
     title.textContent = "New Goal";
@@ -1412,6 +1488,7 @@ function saveGoal(e){
   const notes = document.getElementById("goalNotes").value.trim();
   const rawTargetWords = parseInt(document.getElementById("goalTargetWords").value, 10);
   const targetDate = document.getElementById("goalTargetDate").value;
+  const scope = document.getElementById("goalScope").value || "all";
   const targetWords = Number.isFinite(rawTargetWords) && rawTargetWords > 0 ? rawTargetWords : null;
 
   if(!name){
@@ -1419,19 +1496,25 @@ function saveGoal(e){
     return;
   }
   const now = new Date().toISOString();
+  const scopeLabel = scope === "all" ? "Entire Manuscript" : scope;
   const targetLabel = type === "words"
-    ? (targetWords ? `${targetWords.toLocaleString()} words` : "no word target yet")
+    ? (targetWords ? `${targetWords.toLocaleString()} words · ${scopeLabel}` : `no word target yet · ${scopeLabel}`)
     : (targetDate ? `by ${targetDate}` : "no date target yet");
 
   if(editingGoalId && typeof editingGoalId === "string"){
     const idx = goals.findIndex(g=>g.id===editingGoalId);
     if(idx >= 0){
       const prev = goals[idx];
+      const scopeChanged = (prev.scope || "all") !== scope;
+      const targetChanged = (prev.targetWords ?? null) !== (type==="words" ? targetWords : null);
       goals[idx] = {
         ...prev,
         name, type, notes,
+        scope,
         targetWords: type==="words" ? targetWords : null,
         targetDate: type==="date" ? (targetDate || null) : null,
+        completed: prev.completed ?? false,
+        autoCompleteBlocked: (scopeChanged || targetChanged || type !== prev.type) ? false : (prev.autoCompleteBlocked ?? false),
         updatedAt: now
       };
       addActivity({
@@ -1444,9 +1527,12 @@ function saveGoal(e){
     const g = {
       id: uid("goal"),
       name, type, notes,
+      scope,
       targetWords: type==="words" ? targetWords : null,
       targetDate: type==="date" ? (targetDate || null) : null,
       active: goals.length ? false : true, // first goal becomes active by default
+      completed: false,
+      autoCompleteBlocked: false,
       createdAt: now,
       updatedAt: now
     };
@@ -1478,6 +1564,40 @@ function setActiveGoal(goalId){
   // single-active rule: turn off all others
   goals.forEach(x => x.active = (x.id === goalId));
   addActivity({ type:"Active Goal Set", text:`${g.name}`, system:true });
+
+  renderGoals();
+  persistAll();
+}
+
+function toggleGoalCompleted(goalId){
+  if(!isEditMode()) return;
+  const g = goals.find(x=>x.id===goalId);
+  if(!g) return;
+
+  if(!g.completed){
+    const initials = prompt(`Type your initials to complete "${g.name}".`);
+    if(initials === null) return;
+    const cleanInitials = initials.trim().toUpperCase();
+    if(!cleanInitials){
+      alert("Initials are required to complete this goal.");
+      return;
+    }
+    g.completed = true;
+    g.autoCompleteBlocked = false;
+    addActivity({
+      type:"Goal Completed",
+      text:`${g.name} (${cleanInitials})`,
+      system:true
+    });
+  }else{
+    g.completed = false;
+    g.autoCompleteBlocked = true;
+    addActivity({
+      type:"Goal Reopened",
+      text:`${g.name}`,
+      system:true
+    });
+  }
 
   renderGoals();
   persistAll();
@@ -1534,12 +1654,34 @@ function renderGoals(){
   empty.style.display = "none";
 
   const isAuthor = isEditMode();
+  const today = new Date();
+  today.setHours(0,0,0,0);
 
   list.innerHTML = visible.map(g=>{
     const sub = g.type === "words"
       ? (g.targetWords ? `Target: ${Number(g.targetWords).toLocaleString()} words` : "Target: not set")
       : (g.targetDate ? `Target: ${g.targetDate}` : "Target: not set");
-    const noteLine = g.notes ? ` · ${g.notes}` : "";
+    const scopeLabel = g.scope && g.scope !== "all" ? g.scope : "Entire Manuscript";
+    const noteLine = `${g.notes ? ` · ${g.notes}` : ""} · Applies to: ${scopeLabel}`;
+    let statusText = "";
+    let statusClass = "";
+
+    if(g.completed){
+      statusText = "Completed";
+      statusClass = "goal-status-complete";
+    }else if(g.type === "date" && g.targetDate){
+      const targetDate = new Date(g.targetDate);
+      targetDate.setHours(0,0,0,0);
+      if(today > targetDate){
+        const daysBehind = Math.ceil((today - targetDate) / 86400000);
+        statusText = `${daysBehind} ${daysBehind === 1 ? "day" : "days"} behind`;
+        statusClass = "goal-status-behind";
+      }
+    }
+
+    const statusMarkup = statusText
+      ? `<span class="goal-status ${statusClass}">${escapeHtml(statusText)}</span>`
+      : "";
     const toggle = isAuthor
       ? `<button class="goal-toggle"
           aria-pressed="${g.active ? "true":"false"}"
@@ -1548,18 +1690,21 @@ function renderGoals(){
         </button>`
       : `<div aria-hidden="true"></div>`;
     const controls = isAuthor
-      ? `<div class="goal-actions">
-          <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
-          <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+      ? `<div class="goal-actions goal-actions-stack">
+          <div class="goal-actions-main">
+            <button class="small-link" onclick="openGoalModal('${g.id}')">Edit</button>
+            <button class="small-link" onclick="deleteGoal('${g.id}')">Delete</button>
+          </div>
+          <button class="small-link" onclick="toggleGoalCompleted('${g.id}')">${g.completed ? "Undo Complete" : "Complete"}</button>
         </div>`
       : "";
 
     return `
-      <div class="goal-item">
+      <div class="goal-item ${g.completed ? "goal-finished" : ""}">
         ${toggle}
 
         <div class="goal-meta">
-          <div class="name">${escapeHtml(g.name)}</div>
+          <div class="name">${escapeHtml(g.name)}${statusMarkup}</div>
           <div class="sub">${escapeHtml(sub + noteLine)}</div>
         </div>
 
