@@ -571,6 +571,12 @@ input, select, textarea{
 .author-only { display: none !important; }
 body.edit-mode .author-only { display: inline-block !important; }
 body.edit-mode .panel-head button.author-only { display: block !important; }
+body.edit-mode .author-only-block { display: block !important; }
+
+.chapter-counter-textarea{min-height:180px}
+.chapter-counter-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.chapter-counter-count{font-size:22px;font-weight:700}
+.chapter-counter-status{font-size:13px;color:var(--muted);min-height:1.2em}
 
 /* Author controls layout (keeps your look intact) */
 .author-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
@@ -697,6 +703,34 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
         </aside>
       </div>
     </div>
+
+    <!-- NEW: Author-Only Chapter Counter panel -->
+    <section class="panel author-only author-only-block" aria-label="Live Chapter Counter" style="margin-top:18px; text-align:left;">
+      <div class="panel-head">
+        <div class="heading">Live Chapter Counter</div>
+      </div>
+      <div class="panel-body">
+        <div class="row">
+          <div class="field" style="max-width:320px;">
+            <label for="chapterCounterSelect">Chapter / Car</label>
+            <select id="chapterCounterSelect"></select>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;">
+          <div class="field" style="flex:1 1 100%; min-width:100%;">
+            <label for="chapterCounterText">Chapter Text</label>
+            <textarea id="chapterCounterText" class="chapter-counter-textarea" placeholder="Paste or type chapter text here..."></textarea>
+          </div>
+        </div>
+
+        <div class="chapter-counter-meta" style="margin-top:12px;">
+          <div class="chapter-counter-count"><span id="chapterCounterWords">0</span> words</div>
+          <button type="button" onclick="applyChapterWordCount()">Apply to Chapter</button>
+        </div>
+        <div class="chapter-counter-status" id="chapterCounterStatus" aria-live="polite"></div>
+      </div>
+    </section>
 
     <!-- ANALYTICS -->
     <div class="analytics-shell">
@@ -942,6 +976,8 @@ function refreshUI(){
   renderGoals();
   renderProItems();
   renderActivity();
+  renderChapterCounterOptions();
+  handleChapterCounterInput();
   switchWorkspaceTab(workspaceTab || 'goals');
 }
 
@@ -981,6 +1017,66 @@ function ensureGoalScopeOptions(){
   const select = document.getElementById("goalScope");
   if(!select) return;
   select.innerHTML = [`<option value="all">Entire Manuscript</option>`, ...carNames.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)].join("");
+}
+
+// NEW: Author-only chapter counter helpers
+function countWords(text){
+  const trimmed = (text || "").trim();
+  if(!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+function renderChapterCounterOptions(){
+  const select = document.getElementById("chapterCounterSelect");
+  if(!select) return;
+
+  const previous = Number(select.value);
+  select.innerHTML = "";
+
+  state.forEach((car, i) => {
+    const option = document.createElement("option");
+    option.value = i;
+    option.textContent = car.name;
+    select.appendChild(option);
+  });
+
+  const nextValue = Number.isInteger(previous) && previous >= 0 && previous < state.length
+    ? previous
+    : selectedIndex;
+  select.value = String(nextValue);
+}
+
+function handleChapterCounterInput(){
+  const textArea = document.getElementById("chapterCounterText");
+  const wordsEl = document.getElementById("chapterCounterWords");
+  if(!textArea || !wordsEl) return;
+  wordsEl.textContent = countWords(textArea.value).toLocaleString();
+}
+
+function applyChapterWordCount(){
+  if(!isEditMode()) return;
+
+  const select = document.getElementById("chapterCounterSelect");
+  const textArea = document.getElementById("chapterCounterText");
+  const status = document.getElementById("chapterCounterStatus");
+  if(!select || !textArea || !status) return;
+
+  const chapterIndex = Number(select.value);
+  if(!Number.isInteger(chapterIndex) || chapterIndex < 0 || chapterIndex >= state.length){
+    status.textContent = "Choose a chapter first.";
+    return;
+  }
+
+  const appliedWords = countWords(textArea.value);
+  state[chapterIndex].current = appliedWords;
+  selectedIndex = chapterIndex;
+
+  renderCars();
+  updateAnalytics();
+  renderGoals();
+  persistAll();
+
+  status.textContent = `Applied ${appliedWords.toLocaleString()} words to ${state[chapterIndex].name}.`;
 }
 
 function renderCars(){
@@ -2090,6 +2186,11 @@ document.addEventListener("DOMContentLoaded", function(){
   const btn = document.getElementById("goalSaveBtn");
   if(btn){
     btn.addEventListener("click", () => saveGoal());
+  }
+
+  const chapterCounterText = document.getElementById("chapterCounterText");
+  if(chapterCounterText){
+    chapterCounterText.addEventListener("input", handleChapterCounterInput);
   }
 });
   
