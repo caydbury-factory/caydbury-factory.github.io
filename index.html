@@ -958,6 +958,7 @@ async function loadFromCloud() {
 
     if (Array.isArray(data.state)) {
       state = data.state;
+      normalizeStateBaselineFields();
       hasUsableData = true;
     }
     if (Array.isArray(data.sessions)) sessions = data.sessions;
@@ -966,10 +967,16 @@ async function loadFromCloud() {
     if (Array.isArray(data.proItems)) proItems = data.proItems;
     if (Array.isArray(data.activity)) activity = data.activity;
     if (typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
+    if (Number.isFinite(data.dataVersion)) dataVersion = data.dataVersion;
+    if (typeof data.baselineMigrated === "boolean") baselineMigrated = data.baselineMigrated;
+
+    const migrated = maybeMigrateLegacyTrackedWords();
 
     if (hasUsableData) {
       localStorage.setItem(LS_KEY, JSON.stringify({
-        v: 2,
+        v: MANUSCRIPT_DATA_VERSION,
+        dataVersion,
+        baselineMigrated,
         state,
         sessions,
         selectedIndex,
@@ -978,6 +985,11 @@ async function loadFromCloud() {
         activity,
         workspaceTab
       }));
+    }
+
+    if (migrated) {
+      hasLocalMutations = true;
+      persistAll();
     }
 
     return hasUsableData;
@@ -1003,6 +1015,9 @@ function refreshUI(){
    Existing manuscript logic
 ========================= */
 const GOAL = 50000;
+const BASELINE_WORDS = 109332;
+const MASTER_TARGET = 200000;
+const MANUSCRIPT_DATA_VERSION = 3;
 
 const carNames = [
   "Engine",
@@ -1018,14 +1033,74 @@ const carNames = [
   "Double Decker Car"
 ];
 
-let state = carNames.map(name=>({name,current:0,goal:3000,stage:"Outline"}));
+let state = carNames.map(name=>({name,current:0,baselineCurrent:0,goal:3000,stage:"Outline"}));
 let sessions = [];
 let selectedIndex=0;
+let dataVersion = MANUSCRIPT_DATA_VERSION;
+let baselineMigrated = false;
+
+function getTrackedManuscriptWords(){
+  return state.reduce((sum, car) => {
+    const current = Number(car.current) || 0;
+    const baselineCurrent = Number(car.baselineCurrent) || 0;
+    return sum + Math.max(0, current - baselineCurrent);
+  }, 0);
+}
+
+function getDisplayedManuscriptWords(){
+  return BASELINE_WORDS + getTrackedManuscriptWords();
+}
+
+function getEffectiveProjectionPace(avgPerDay){
+  return Math.min(Math.max(0, avgPerDay || 0), 2000);
+}
+
+function maybeMigrateLegacyTrackedWords(){
+  if(baselineMigrated) return false;
+
+  const totalCurrentWords = state.reduce((sum, car) => sum + (Number(car.current) || 0), 0);
+  if(totalCurrentWords < BASELINE_WORDS * 0.75) return false;
+
+  state = state.map((car, i) => {
+    const current = Number(car.current) || 0;
+    return {
+      name: carNames[i] || car.name || `Chapter ${i + 1}`,
+      current,
+      baselineCurrent: current,
+      goal: Number(car.goal) || 3000,
+      stage: car.stage || "Outline"
+    };
+  });
+
+  baselineMigrated = true;
+  dataVersion = MANUSCRIPT_DATA_VERSION;
+  return true;
+}
+
+function normalizeStateBaselineFields(){
+  state = state.map((car, i) => ({
+    name: carNames[i] || car.name || `Chapter ${i + 1}`,
+    current: Number(car.current) || 0,
+    baselineCurrent: Number(car.baselineCurrent) || 0,
+    goal: Number(car.goal) || 3000,
+    stage: car.stage || "Outline"
+  }));
+
+  const hasBaselineSnapshots = state.some(car => (Number(car.baselineCurrent) || 0) > 0);
+  const totalCurrentWords = state.reduce((sum, car) => sum + (Number(car.current) || 0), 0);
+
+  if(baselineMigrated && !hasBaselineSnapshots && totalCurrentWords >= BASELINE_WORDS * 0.75){
+    state = state.map(car => ({
+      ...car,
+      baselineCurrent: Number(car.current) || 0
+    }));
+  }
+}
 
 function getGoalScopeWords(goal){
   const scope = goal?.scope || "all";
   if(scope === "all"){
-    return state.reduce((sum,car)=>sum + (Number(car.current) || 0),0);
+    return getTrackedManuscriptWords();
   }
   const scopedCar = state.find(car => car.name === scope);
   return scopedCar ? (Number(scopedCar.current) || 0) : 0;
@@ -1125,7 +1200,7 @@ function renderCars(){
     container.appendChild(div);
   });
   document.getElementById("totalWords").innerText=
-    state.reduce((s,c)=>s+c.current,0).toLocaleString();
+    getDisplayedManuscriptWords().toLocaleString();
 }
 
 function openModal(){
@@ -1355,27 +1430,26 @@ function updateAnalytics(){
 
   // ===== SMART FINISH PREDICTOR =====
 
-  const MASTER_TARGET = 200000;
-  const activeGoal = goals.find(g => g.active);
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
+  const totalTracked = getTrackedManuscriptWords();
+  const currentManuscriptWords = BASELINE_WORDS + totalTracked;
 
   // ===== AUTO COMPLETE WORD GOALS (Scoped) =====
   let goalsAutoUpdated = false;
-  
+
   goals.forEach(goal => {
-  
+
     if(
       !goal.completed &&
       goal.type === "words" &&
       goal.targetWords
     ){
-  
+
       const scopedTotal = getGoalScopeWords(goal);
-  
+
       if(scopedTotal >= Number(goal.targetWords)){
         goal.completed = true;
         goalsAutoUpdated = true;
-  
+
         addActivity({
           type:"Goal Completed (Auto)",
           text: goal.name,
@@ -1384,58 +1458,42 @@ function updateAnalytics(){
       }
     }
   });
-  
-  // Determine manuscript target
-  let targetTotal = MASTER_TARGET;
-  if(activeGoal && activeGoal.type === "words" && activeGoal.targetWords){
-    targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
-  }
-  
-  const activeScopedTotal = activeGoal ? getGoalScopeWords(activeGoal) : totalAll;
-  const remaining = Math.max(0, targetTotal - activeScopedTotal);
-  
-  // ALL sessions count (Outline included)
+
+  const remaining = Math.max(0, MASTER_TARGET - currentManuscriptWords);
+
+  // ALL new sessions (Outline included)
   const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
-  
+
   const uniqueDays = new Set(
     sessions.map(s => new Date(s.timestamp).toDateString())
   ).size;
-  
-  const avgPerDay = uniqueDays > 0
+
+  const actualAvgPerDay = uniqueDays > 0
     ? totalWordsEver / uniqueDays
     : 0;
-  
+
+  const projectionPace = getEffectiveProjectionPace(actualAvgPerDay);
+
   let line1 = "—";
   let line2 = "";
-  
-  if(totalAll >= targetTotal){
+
+  if(currentManuscriptWords >= MASTER_TARGET){
     line1 = "Complete";
     line2 = "Manuscript target achieved.";
   }
-  else if(activeGoal && activeGoal.type === "date" && activeGoal.targetDate){
-  
-    const targetDate = new Date(activeGoal.targetDate);
-    const today = new Date();
-    const msPerDay = 86400000;
-  
-    const daysLeft = Math.ceil((targetDate - today) / msPerDay);
-  
-    if(daysLeft > 0){
-      const neededPerDay = Math.ceil(remaining / daysLeft);
-      line1 = targetDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
-      line2 = `To meet goal: ${neededPerDay.toLocaleString()} words/day · Current pace: ${Math.round(avgPerDay).toLocaleString()}/day`;
-    }
-  }
-  else if(avgPerDay > 0){
-  
-    const daysNeeded = Math.ceil(remaining / avgPerDay);
+  else if(projectionPace > 0){
+
+    const daysNeeded = Math.ceil(remaining / projectionPace);
     const finishDate = new Date();
     finishDate.setDate(finishDate.getDate() + daysNeeded);
-  
+
     line1 = finishDate.toLocaleDateString([], {year:"numeric", month:"short", day:"numeric"});
-    line2 = `Cross-check: ${Math.round(avgPerDay).toLocaleString()} words/day`;
+    line2 = `Using ${Math.round(projectionPace).toLocaleString()} words/day for projection (capped at 2,000/day).`;
   }
-  
+  else {
+    line2 = "Projection begins after new writing sessions are recorded.";
+  }
+
   document.getElementById("finishEstimate").innerHTML = `
     ${line1}
     <div style="font-size:13px; color:var(--muted); margin-top:6px;">
@@ -2105,7 +2163,9 @@ function persistAll(){
   hasLocalMutations = true;
 
   const payload = {
-    v: 2,
+    v: MANUSCRIPT_DATA_VERSION,
+    dataVersion,
+    baselineMigrated,
     state,
     sessions,
     selectedIndex,
@@ -2152,9 +2212,11 @@ function resetEverything(){
   if (!ok) return;
 
   // Reset core manuscript data
-  state = carNames.map(name => ({ name, current: 0, goal: 3000, stage: 'Outline' }));
+  state = carNames.map(name => ({ name, current: 0, baselineCurrent: 0, goal: 3000, stage: 'Outline' }));
   sessions = [];
   selectedIndex = 0;
+  dataVersion = MANUSCRIPT_DATA_VERSION;
+  baselineMigrated = true;
 
   // Reset workspace data
   goals = [];
@@ -2166,6 +2228,8 @@ function resetEverything(){
   localStorage.removeItem(LS_KEY);
 
   // Reset UI + save (cloud save only in edit-mode)
+  normalizeStateBaselineFields();
+
   refreshUI();
   persistAll();
 
@@ -2188,7 +2252,10 @@ function loadAll(){
     if(!raw) return;
     const data = JSON.parse(raw);
 
-    if(Array.isArray(data.state)) state = data.state;
+    if(Array.isArray(data.state)) {
+      state = data.state;
+      normalizeStateBaselineFields();
+    }
     if(Array.isArray(data.sessions)) sessions = data.sessions;
     if(Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
 
@@ -2196,6 +2263,14 @@ function loadAll(){
     if(Array.isArray(data.proItems)) proItems = data.proItems;
     if(Array.isArray(data.activity)) activity = data.activity;
     if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
+    if(Number.isFinite(data.dataVersion)) dataVersion = data.dataVersion;
+    if(typeof data.baselineMigrated === "boolean") baselineMigrated = data.baselineMigrated;
+
+    const migrated = maybeMigrateLegacyTrackedWords();
+    if(migrated){
+      hasLocalMutations = true;
+      persistAll();
+    }
   }catch(e){
     // ignore
   }
@@ -2224,6 +2299,8 @@ document.addEventListener("DOMContentLoaded", function(){
     console.warn("[Boot] Cloud unavailable, falling back to localStorage.");
     loadAll();
   }
+
+  normalizeStateBaselineFields();
 
   refreshUI();
 
