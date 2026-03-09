@@ -1003,6 +1003,8 @@ function refreshUI(){
    Existing manuscript logic
 ========================= */
 const GOAL = 50000;
+const BASELINE_WORDS = 109332;
+const MASTER_TARGET = 200000;
 
 const carNames = [
   "Engine",
@@ -1029,6 +1031,15 @@ function getGoalScopeWords(goal){
   }
   const scopedCar = state.find(car => car.name === scope);
   return scopedCar ? (Number(scopedCar.current) || 0) : 0;
+}
+
+function getTrackedManuscriptWords(){
+  return state.reduce((sum,car)=>sum + (Number(car.current) || 0),0);
+}
+
+function getDisplayedManuscriptWords(){
+  // Baseline reflects pre-ledger manuscript words; tracked words come from this ledger only.
+  return BASELINE_WORDS + getTrackedManuscriptWords();
 }
 
 function ensureGoalScopeOptions(){
@@ -1124,8 +1135,8 @@ function renderCars(){
     `;
     container.appendChild(div);
   });
-  document.getElementById("totalWords").innerText=
-    state.reduce((s,c)=>s+c.current,0).toLocaleString();
+  document.getElementById("totalWords").innerText =
+    getDisplayedManuscriptWords().toLocaleString();
 }
 
 function openModal(){
@@ -1355,9 +1366,8 @@ function updateAnalytics(){
 
   // ===== SMART FINISH PREDICTOR =====
 
-  const MASTER_TARGET = 200000;
   const activeGoal = goals.find(g => g.active);
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
+  const currentManuscriptWords = getDisplayedManuscriptWords();
 
   // ===== AUTO COMPLETE WORD GOALS (Scoped) =====
   let goalsAutoUpdated = false;
@@ -1385,14 +1395,9 @@ function updateAnalytics(){
     }
   });
   
-  // Determine manuscript target
-  let targetTotal = MASTER_TARGET;
-  if(activeGoal && activeGoal.type === "words" && activeGoal.targetWords){
-    targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
-  }
-  
-  const activeScopedTotal = activeGoal ? getGoalScopeWords(activeGoal) : totalAll;
-  const remaining = Math.max(0, targetTotal - activeScopedTotal);
+  // Finish prediction is based on full manuscript progress: baseline + tracked words.
+  const targetTotal = MASTER_TARGET;
+  const remaining = Math.max(0, targetTotal - currentManuscriptWords);
   
   // ALL sessions count (Outline included)
   const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
@@ -1408,7 +1413,7 @@ function updateAnalytics(){
   let line1 = "—";
   let line2 = "";
   
-  if(totalAll >= targetTotal){
+  if(currentManuscriptWords >= targetTotal){
     line1 = "Complete";
     line2 = "Manuscript target achieved.";
   }
