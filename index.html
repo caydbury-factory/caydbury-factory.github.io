@@ -1003,6 +1003,9 @@ function refreshUI(){
    Existing manuscript logic
 ========================= */
 const GOAL = 50000;
+const BASELINE_WORDS = 109322;
+const MASTER_TARGET = 200000;
+const LEGACY_TRACKED_BASELINE_WORDS = 109322;
 
 const carNames = [
   "Engine",
@@ -1029,6 +1032,48 @@ function getGoalScopeWords(goal){
   }
   const scopedCar = state.find(car => car.name === scope);
   return scopedCar ? (Number(scopedCar.current) || 0) : 0;
+}
+
+function getRawTrackedManuscriptWords(){
+  return state.reduce((sum,car)=>sum + (Number(car.current) || 0),0);
+}
+
+function getTrackedManuscriptWords(){
+  // Some ledgers were historically started by logging existing manuscript words.
+  // We subtract that one-time legacy baseline so only *new* tracked writing is counted.
+  return Math.max(0, getRawTrackedManuscriptWords() - LEGACY_TRACKED_BASELINE_WORDS);
+}
+
+function getAnalyticsSessions(){
+  const baselineToIgnore = LEGACY_TRACKED_BASELINE_WORDS;
+  if(!baselineToIgnore) return sessions.slice();
+
+  // Remove up to baseline words from oldest sessions so analytics reflect only new writing.
+  const sorted = sessions
+    .map((session,index)=>({session,index}))
+    .sort((a,b)=>new Date(a.session.timestamp) - new Date(b.session.timestamp));
+
+  const adjusted = new Array(sessions.length).fill(null);
+  let remaining = baselineToIgnore;
+
+  sorted.forEach(({session,index})=>{
+    const words = Number(session.words) || 0;
+    const consumed = Math.min(remaining, words);
+    const adjustedWords = words - consumed;
+    remaining -= consumed;
+
+    adjusted[index] = {
+      ...session,
+      words: adjustedWords
+    };
+  });
+
+  return adjusted.filter(Boolean).filter(s => (Number(s.words) || 0) > 0);
+}
+
+function getDisplayedManuscriptWords(){
+  // Baseline reflects pre-ledger manuscript words; tracked words are only post-baseline progress.
+  return BASELINE_WORDS + getTrackedManuscriptWords();
 }
 
 function ensureGoalScopeOptions(){
@@ -1124,8 +1169,8 @@ function renderCars(){
     `;
     container.appendChild(div);
   });
-  document.getElementById("totalWords").innerText=
-    state.reduce((s,c)=>s+c.current,0).toLocaleString();
+  document.getElementById("totalWords").innerText =
+    getDisplayedManuscriptWords().toLocaleString();
 }
 
 function openModal(){
@@ -1208,7 +1253,7 @@ function updateAnalytics(){
     return bar;
   }
 
-  const valid=sessions.filter(s=>s.stage!=="Outline");
+  const valid=getAnalyticsSessions().filter(s=>s.stage!=="Outline");
 
   // Average per session
   const total=valid.reduce((s,v)=>s+v.words,0);
@@ -1355,9 +1400,8 @@ function updateAnalytics(){
 
   // ===== SMART FINISH PREDICTOR =====
 
-  const MASTER_TARGET = 200000;
   const activeGoal = goals.find(g => g.active);
-  const totalAll = state.reduce((s,c)=>s+c.current,0);
+  const currentManuscriptWords = getDisplayedManuscriptWords();
 
   // ===== AUTO COMPLETE WORD GOALS (Scoped) =====
   let goalsAutoUpdated = false;
@@ -1385,20 +1429,16 @@ function updateAnalytics(){
     }
   });
   
-  // Determine manuscript target
-  let targetTotal = MASTER_TARGET;
-  if(activeGoal && activeGoal.type === "words" && activeGoal.targetWords){
-    targetTotal = Number(activeGoal.targetWords) || MASTER_TARGET;
-  }
-  
-  const activeScopedTotal = activeGoal ? getGoalScopeWords(activeGoal) : totalAll;
-  const remaining = Math.max(0, targetTotal - activeScopedTotal);
+  // Finish prediction is based on full manuscript progress: baseline + tracked words.
+  const targetTotal = MASTER_TARGET;
+  const remaining = Math.max(0, targetTotal - currentManuscriptWords);
   
   // ALL sessions count (Outline included)
-  const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
+  const analyticsSessions = getAnalyticsSessions();
+  const totalWordsEver = analyticsSessions.reduce((s,v)=>s+v.words,0);
   
   const uniqueDays = new Set(
-    sessions.map(s => new Date(s.timestamp).toDateString())
+    analyticsSessions.map(s => new Date(s.timestamp).toDateString())
   ).size;
   
   const avgPerDay = uniqueDays > 0
@@ -1408,7 +1448,7 @@ function updateAnalytics(){
   let line1 = "—";
   let line2 = "";
   
-  if(totalAll >= targetTotal){
+  if(currentManuscriptWords >= targetTotal){
     line1 = "Complete";
     line2 = "Manuscript target achieved.";
   }
