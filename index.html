@@ -1208,7 +1208,7 @@ function updateAnalytics(){
     return bar;
   }
 
-  const valid=sessions.filter(s=>s.stage!=="Outline");
+  const valid=getAnalyticsSessions().filter(s=>s.stage!=="Outline");
 
   // Average per session
   const total=valid.reduce((s,v)=>s+v.words,0);
@@ -1395,10 +1395,11 @@ function updateAnalytics(){
   const remaining = Math.max(0, targetTotal - activeScopedTotal);
   
   // ALL sessions count (Outline included)
-  const totalWordsEver = sessions.reduce((s,v)=>s+v.words,0);
+  const analyticsSessions = getAnalyticsSessions();
+  const totalWordsEver = analyticsSessions.reduce((s,v)=>s+v.words,0);
   
   const uniqueDays = new Set(
-    sessions.map(s => new Date(s.timestamp).toDateString())
+    analyticsSessions.map(s => new Date(s.timestamp).toDateString())
   ).size;
   
   const avgPerDay = uniqueDays > 0
