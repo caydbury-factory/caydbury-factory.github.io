@@ -46,6 +46,15 @@ body{
 .hero-text h1{font-size:42px;margin:0 0 8px; letter-spacing:.5px}
 .hero-text h2{font-weight:normal;color:var(--muted);margin:0 0 25px}
 .hero-manifesto{font-size:18px;line-height:1.6;margin-bottom:30px}
+#liveWritingStatus{
+  min-height:22px;
+  margin:-6px 0 18px;
+  font-size:14px;
+  font-style:italic;
+  color:var(--deep);
+  opacity:.95;
+  transition:opacity .35s ease;
+}
 
 button{
   background:var(--accent);
@@ -114,14 +123,14 @@ input, select, textarea{
   opacity:1;
 }
 .car.is-typing svg{
-  filter:drop-shadow(0 0 8px rgba(94,143,158,.3));
-  animation:carTypingPulse 1.45s ease-in-out infinite;
+  filter:drop-shadow(0 0 10px rgba(94,143,158,.24)) drop-shadow(0 0 18px rgba(115,168,184,.20));
+  animation:carTypingPulse 1.8s ease-in-out infinite;
 }
 .car.is-updated{
   opacity:1;
 }
 .car.is-updated svg{
-  filter:drop-shadow(0 0 8px rgba(51,0,102,.22));
+  filter:drop-shadow(0 0 8px rgba(94,143,158,.18));
 }
 .percent-text{
   font-size:14px;
@@ -143,8 +152,8 @@ input, select, textarea{
 }
 
 @keyframes carTypingPulse{
-  0%,100%{transform:scale(1)}
-  50%{transform:scale(1.04)}
+  0%,100%{transform:scale(1); opacity:1;}
+  50%{transform:scale(1.055); opacity:.96;}
 }
 
 /* NEW: GOALS + ACTIVITY */
@@ -632,6 +641,7 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
         Word by word. Chapter by chapter.<br>
         No shortcuts. No vanishing drafts.
       </p>
+      <div id="liveWritingStatus" aria-live="polite"></div>
       <div class="author-controls">
         <button class="author-only" onclick="openModal()">Author’s Update</button>
         <div class="author-only reset-wrap" aria-label="Reset controls">
@@ -993,7 +1003,14 @@ async function loadFromCloud() {
     if (typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
     if (Number.isFinite(data.dataVersion)) dataVersion = data.dataVersion;
     if (typeof data.baselineMigrated === "boolean") baselineMigrated = data.baselineMigrated;
-
+	if (data.livePresence && typeof data.livePresence === "object") {
+	  livePresence = {
+		chapterIndex: Number.isInteger(data.livePresence.chapterIndex) ? data.livePresence.chapterIndex : null,
+		status: typeof data.livePresence.status === "string" ? data.livePresence.status : "idle",
+		updatedAt: typeof data.livePresence.updatedAt === "string" ? data.livePresence.updatedAt : null
+	  };
+	}
+	
     const migrated = maybeMigrateLegacyTrackedWords();
 
     if (hasUsableData) {
@@ -1007,7 +1024,8 @@ async function loadFromCloud() {
         goals,
         proItems,
         activity,
-        workspaceTab
+        workspaceTab,
+        livePresence
       }));
     }
 
@@ -1045,13 +1063,13 @@ const MANUSCRIPT_DATA_VERSION = 3;
 
 const carNames = [
   "Engine",
-  "Coach (Open) Car",
+  "Open Car",
   "Observation Car",
   "Dining Car",
-  "Coach (Compartment) Car",
+  "Compartment Car",
   "Sleeper Car",
   "Beverage Car",
-  "Tender Engine",
+  "Tender",
   "Lounge Car",
   "Baggage Car",
   "Double Decker Car"
@@ -1066,6 +1084,14 @@ let typingChapterIndex = null;
 let typingTimeout = null;
 let justUpdatedChapterIndex = null;
 let justUpdatedTimeout = null;
+let livePresence = {
+  chapterIndex: null,
+  status: "idle", // "idle" | "typing" | "updated"
+  updatedAt: null
+};
+
+let livePresencePushTimeout = null;
+let presencePollInterval = null;
 
 function getTrackedManuscriptWords(){
   return state.reduce((sum, car) => {
@@ -1167,6 +1193,105 @@ function renderChapterCounterOptions(){
   select.value = String(nextValue);
 }
 
+function setLivePresence(status, chapterIndex = null) {
+  livePresence = {
+    chapterIndex: Number.isInteger(chapterIndex) ? chapterIndex : null,
+    status,
+    updatedAt: new Date().toISOString()
+  };
+
+  applyRemotePresenceToUI();
+
+  if (!isEditMode()) return;
+
+  // throttle cloud writes a little so typing doesn't spam every keystroke
+  if (livePresencePushTimeout) clearTimeout(livePresencePushTimeout);
+  livePresencePushTimeout = setTimeout(() => {
+    persistAll();
+    livePresencePushTimeout = null;
+  }, 700);
+}
+
+function clearLivePresence() {
+  livePresence = {
+    chapterIndex: null,
+    status: "idle",
+    updatedAt: new Date().toISOString()
+  };
+
+  typingChapterIndex = null;
+  justUpdatedChapterIndex = null;
+  renderCars();
+
+  if (isEditMode()) {
+    persistAll();
+  }
+}
+
+function applyRemotePresenceToUI() {
+  const statusEl = document.getElementById("liveWritingStatus");
+
+  typingChapterIndex = null;
+  justUpdatedChapterIndex = null;
+
+  if (!livePresence || !livePresence.updatedAt) {
+    if (statusEl) statusEl.textContent = "";
+    renderCars();
+    return;
+  }
+
+  const ageMs = Date.now() - new Date(livePresence.updatedAt).getTime();
+  const chapterIndex = livePresence.chapterIndex;
+
+  if (!Number.isInteger(chapterIndex) || chapterIndex < 0 || chapterIndex >= state.length) {
+    if (statusEl) statusEl.textContent = "";
+    renderCars();
+    return;
+  }
+
+  if (livePresence.status === "typing" && ageMs <= 10000) {
+    typingChapterIndex = chapterIndex;
+    if (statusEl) {
+      statusEl.textContent = "✍️ Cayd is writing right now…";
+    }
+  } else if (livePresence.status === "updated" && ageMs <= 2500) {
+    justUpdatedChapterIndex = chapterIndex;
+    if (statusEl) {
+      statusEl.textContent = "Latest pages just updated.";
+    }
+  } else {
+    if (statusEl) statusEl.textContent = "";
+  }
+
+  renderCars();
+}
+
+async function pollLivePresence() {
+  try {
+    const response = await fetch(SCRIPT_URL + "?t=" + Date.now(), {
+      method: "GET",
+      cache: "no-store"
+    });
+
+    const data = await response.json();
+    if (data && typeof data === "object" && data.livePresence) {
+      livePresence = data.livePresence;
+      applyRemotePresenceToUI();
+    }
+  } catch (err) {
+    console.warn("[Presence Poll] Failed:", err);
+  }
+}
+
+function startPresencePolling() {
+  if (presencePollInterval) clearInterval(presencePollInterval);
+
+  // public side needs polling most; author side can poll too without harm
+  presencePollInterval = setInterval(() => {
+    pollLivePresence();
+  }, 2500);
+}
+
 function handleChapterCounterInput(){
   const select = document.getElementById("chapterCounterSelect");
   const textArea = document.getElementById("chapterCounterText");
@@ -1174,8 +1299,10 @@ function handleChapterCounterInput(){
   if(!select || !textArea || !wordsEl) return;
 
   const chapterIndex = Number(select.value);
+
   if(Number.isInteger(chapterIndex) && chapterIndex >= 0 && chapterIndex < state.length){
     typingChapterIndex = chapterIndex;
+
     if(justUpdatedChapterIndex === chapterIndex){
       justUpdatedChapterIndex = null;
       if(justUpdatedTimeout){
@@ -1183,12 +1310,16 @@ function handleChapterCounterInput(){
         justUpdatedTimeout = null;
       }
     }
+
     if(typingTimeout) clearTimeout(typingTimeout);
     typingTimeout = setTimeout(() => {
       typingChapterIndex = null;
       typingTimeout = null;
+      setLivePresence("idle", null);
       renderCars();
     }, 1750);
+
+    setLivePresence("typing", chapterIndex);
     renderCars();
   }
 
@@ -1212,18 +1343,22 @@ function applyChapterWordCount(){
   const appliedWords = countWords(textArea.value);
   state[chapterIndex].current = appliedWords;
   selectedIndex = chapterIndex;
-
-  typingChapterIndex = null;
+  
+    typingChapterIndex = null;
   if(typingTimeout){
     clearTimeout(typingTimeout);
     typingTimeout = null;
   }
 
   justUpdatedChapterIndex = chapterIndex;
+  
+  setLivePresence("updated", chapterIndex);
+  
   if(justUpdatedTimeout) clearTimeout(justUpdatedTimeout);
   justUpdatedTimeout = setTimeout(() => {
     justUpdatedChapterIndex = null;
     justUpdatedTimeout = null;
+	setLivePresence("idle", null);
     renderCars();
   }, 31250);
 
@@ -1246,11 +1381,11 @@ function renderCars(){
     const div=document.createElement("div");
     div.className="car";
     if(i===selectedIndex)div.classList.add("active");
-    if(i===typingChapterIndex)div.classList.add("is-typing");
+	if(i===typingChapterIndex)div.classList.add("is-typing");
     if(i===justUpdatedChapterIndex)div.classList.add("is-updated");
     div.onclick=()=>{selectedIndex=i;renderCars();updateAnalytics();}
-
-    const temporaryLabel = i===typingChapterIndex
+	
+	const temporaryLabel = i===typingChapterIndex
       ? { text: "Typing...", className: "typing-label" }
       : i===justUpdatedChapterIndex
         ? { text: "Updated", className: "updated-label" }
@@ -2243,7 +2378,8 @@ function persistAll(){
     goals,
     proItems,
     activity,
-    workspaceTab
+    workspaceTab,
+    livePresence
   };
 
   // Local save always
@@ -2294,6 +2430,7 @@ function resetEverything(){
   proItems = [];
   activity = [];
   workspaceTab = 'goals';
+  livePresence = { chapterIndex: null, status: 'idle', updatedAt: null };
 
   // Clear local storage
   localStorage.removeItem(LS_KEY);
@@ -2336,6 +2473,13 @@ function loadAll(){
     if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
     if(Number.isFinite(data.dataVersion)) dataVersion = data.dataVersion;
     if(typeof data.baselineMigrated === "boolean") baselineMigrated = data.baselineMigrated;
+    if(data.livePresence && typeof data.livePresence === "object") {
+      livePresence = {
+        chapterIndex: Number.isInteger(data.livePresence.chapterIndex) ? data.livePresence.chapterIndex : null,
+        status: typeof data.livePresence.status === "string" ? data.livePresence.status : "idle",
+        updatedAt: typeof data.livePresence.updatedAt === "string" ? data.livePresence.updatedAt : null
+      };
+    }
 
     const migrated = maybeMigrateLegacyTrackedWords();
     if(migrated){
@@ -2361,6 +2505,11 @@ document.addEventListener("DOMContentLoaded", function(){
   if(chapterCounterText){
     chapterCounterText.addEventListener("input", handleChapterCounterInput);
   }
+
+  const chapterCounterSelect = document.getElementById("chapterCounterSelect");
+  if(chapterCounterSelect){
+    chapterCounterSelect.addEventListener("change", handleChapterCounterInput);
+  }
 });
   
 (async function boot(){
@@ -2374,6 +2523,9 @@ document.addEventListener("DOMContentLoaded", function(){
   normalizeStateBaselineFields();
 
   refreshUI();
+  
+  applyRemotePresenceToUI();
+  startPresencePolling();
 
   // Enforce single active goal
   const active = goals.filter(g => g.active);
