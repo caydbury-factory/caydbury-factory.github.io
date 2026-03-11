@@ -610,6 +610,11 @@ body.edit-mode .author-only-block { display: block !important; }
 .chapter-counter-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .chapter-counter-count{font-size:22px;font-weight:700}
 .chapter-counter-status{font-size:13px;color:var(--muted);min-height:1.2em}
+.simulator-panel{margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(#ffffff,#f4f8fa)}
+.simulator-title{font-size:12px;letter-spacing:1.3px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.simulator-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.simulator-actions button{min-width:130px}
+.simulator-status{font-size:13px;color:var(--deep);min-height:1.2em;margin-top:10px}
 
 /* Author controls layout (keeps your look intact) */
 .author-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
@@ -763,6 +768,46 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
           <button type="button" onclick="applyChapterWordCount()">Apply to Chapter</button>
         </div>
         <div class="chapter-counter-status" id="chapterCounterStatus" aria-live="polite"></div>
+
+        <div class="simulator-panel author-only author-only-block" aria-label="Simulated Writing">
+          <div class="simulator-title">Simulated Writing</div>
+          <div class="row">
+            <div class="field" style="flex:1 1 100%; min-width:100%;">
+              <label for="simText">Draft Text to Simulate</label>
+              <textarea id="simText" placeholder="Paste draft text from your writing program..."></textarea>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="max-width:180px;">
+              <label for="simWpm">Average WPM</label>
+              <input id="simWpm" type="number" min="1" step="1" value="40">
+            </div>
+            <div class="field" style="max-width:180px;">
+              <label for="simPlayback">Playback</label>
+              <select id="simPlayback">
+                <option value="1">Real Time</option>
+                <option value="4">4x</option>
+                <option value="10">10x</option>
+                <option value="999999">Instant</option>
+              </select>
+            </div>
+            <div class="field" style="max-width:220px;">
+              <label for="simLocation">Location</label>
+              <select id="simLocation">
+                <option>Home</option>
+                <option>Cafe</option>
+                <option>Library</option>
+                <option>Office</option>
+                <option>Travel</option>
+              </select>
+            </div>
+          </div>
+          <div class="simulator-actions">
+            <button type="button" id="simulateBtn" onclick="startSimulatedTyping()">Simulate Writing</button>
+            <button type="button" class="btn-quiet" id="stopSimBtn" onclick="stopSimulatedTyping()">Stop</button>
+          </div>
+          <div class="simulator-status" id="simStatus" aria-live="polite"></div>
+        </div>
       </div>
     </section>
 
@@ -1092,6 +1137,14 @@ let livePresence = {
 
 let livePresencePushTimeout = null;
 let presencePollInterval = null;
+let simTimer = null;
+let simRunning = false;
+let simTargetWords = 0;
+let simDisplayedWords = 0;
+let simStartTime = null;
+let simChapterIndex = null;
+let simPlaybackMultiplier = 1;
+let simWordsPerSecond = 0;
 
 function getTrackedManuscriptWords(){
   return state.reduce((sum, car) => {
@@ -1292,6 +1345,152 @@ function startPresencePolling() {
   }, 2500);
 }
 
+function setChapterCounterDisplay(words){
+  const wordsEl = document.getElementById("chapterCounterWords");
+  if(!wordsEl) return;
+  wordsEl.textContent = Math.max(0, Math.floor(Number(words) || 0)).toLocaleString();
+}
+
+function startSimulatedTyping(){
+  if(!isEditMode() || simRunning) return;
+
+  const select = document.getElementById("chapterCounterSelect");
+  const textArea = document.getElementById("simText");
+  const wpmEl = document.getElementById("simWpm");
+  const playbackEl = document.getElementById("simPlayback");
+  const statusEl = document.getElementById("simStatus");
+
+  if(!select || !textArea || !wpmEl || !playbackEl || !statusEl) return;
+
+  const chapterIndex = Number(select.value);
+  if(!Number.isInteger(chapterIndex) || chapterIndex < 0 || chapterIndex >= state.length){
+    statusEl.textContent = "Choose a chapter first.";
+    return;
+  }
+
+  const targetWords = countWords(textArea.value);
+  if(!targetWords){
+    statusEl.textContent = "Paste draft text to simulate first.";
+    return;
+  }
+
+  const avgWpm = Math.max(1, Number(wpmEl.value) || 0);
+  const playback = Math.max(1, Number(playbackEl.value) || 1);
+
+  if(typingTimeout){
+    clearTimeout(typingTimeout);
+    typingTimeout = null;
+  }
+  if(justUpdatedTimeout){
+    clearTimeout(justUpdatedTimeout);
+    justUpdatedTimeout = null;
+  }
+
+  simRunning = true;
+  simTargetWords = targetWords;
+  simDisplayedWords = 0;
+  simStartTime = Date.now();
+  simChapterIndex = chapterIndex;
+  simPlaybackMultiplier = playback;
+  simWordsPerSecond = (avgWpm / 60) * simPlaybackMultiplier;
+
+  selectedIndex = chapterIndex;
+  typingChapterIndex = chapterIndex;
+  justUpdatedChapterIndex = null;
+  setLivePresence("typing", chapterIndex);
+  setChapterCounterDisplay(0);
+  renderCars();
+
+  statusEl.textContent = `Simulating... 0 / ${simTargetWords.toLocaleString()} words`;
+
+  simTimer = setInterval(() => {
+    const elapsedSeconds = (Date.now() - simStartTime) / 1000;
+    const nextWords = Math.min(simTargetWords, Math.floor(elapsedSeconds * simWordsPerSecond));
+    simDisplayedWords = nextWords;
+    setChapterCounterDisplay(simDisplayedWords);
+    statusEl.textContent = `Simulating... ${simDisplayedWords.toLocaleString()} / ${simTargetWords.toLocaleString()} words`;
+    typingChapterIndex = simChapterIndex;
+    renderCars();
+
+    if(simDisplayedWords >= simTargetWords){
+      finishSimulatedTyping(true);
+    }
+  }, 250);
+}
+
+function stopSimulatedTyping(){
+  finishSimulatedTyping(false);
+}
+
+function finishSimulatedTyping(saveSession = true){
+  if(simTimer){
+    clearInterval(simTimer);
+    simTimer = null;
+  }
+
+  const statusEl = document.getElementById("simStatus");
+  const locationEl = document.getElementById("simLocation");
+  const chapterIndex = simChapterIndex;
+  const addedWords = simTargetWords;
+
+  simRunning = false;
+
+  if(!saveSession || !Number.isInteger(chapterIndex) || chapterIndex < 0 || chapterIndex >= state.length){
+    const chapterTextEl = document.getElementById("chapterCounterText");
+    typingChapterIndex = null;
+    simChapterIndex = null;
+    simDisplayedWords = 0;
+    simTargetWords = 0;
+    simStartTime = null;
+    setLivePresence("idle", null);
+    if(chapterTextEl) setChapterCounterDisplay(countWords(chapterTextEl.value));
+    if(statusEl && !saveSession) statusEl.textContent = "Simulation stopped.";
+    renderCars();
+    return;
+  }
+
+  state[chapterIndex].current += addedWords;
+  selectedIndex = chapterIndex;
+
+  sessions.push({
+    words: addedWords,
+    stage: state[chapterIndex].stage || "Draft",
+    location: locationEl ? locationEl.value : "Home",
+    timestamp: new Date().toISOString()
+  });
+
+  addActivity({
+    type:"Simulated Session",
+    text:`+${addedWords.toLocaleString()} words · ${state[chapterIndex].stage || "Draft"} · ${(locationEl ? locationEl.value : "Home")}`,
+    system:true
+  });
+
+  simDisplayedWords = addedWords;
+  setChapterCounterDisplay(simDisplayedWords);
+
+  typingChapterIndex = null;
+  justUpdatedChapterIndex = chapterIndex;
+  setLivePresence("updated", chapterIndex);
+
+  renderCars();
+  updateAnalytics();
+  renderGoals();
+  persistAll();
+
+  if(statusEl) statusEl.textContent = `Finished simulation: ${addedWords.toLocaleString()} words added to ${state[chapterIndex].name}.`;
+
+  if(justUpdatedTimeout) clearTimeout(justUpdatedTimeout);
+  justUpdatedTimeout = setTimeout(() => {
+    justUpdatedChapterIndex = null;
+    simChapterIndex = null;
+    simDisplayedWords = 0;
+    simTargetWords = 0;
+    simStartTime = null;
+    setLivePresence("idle", null);
+    renderCars();
+  }, 1500);
+}
+
 function handleChapterCounterInput(){
   const select = document.getElementById("chapterCounterSelect");
   const textArea = document.getElementById("chapterCounterText");
@@ -1323,7 +1522,7 @@ function handleChapterCounterInput(){
     renderCars();
   }
 
-  wordsEl.textContent = countWords(textArea.value).toLocaleString();
+  setChapterCounterDisplay(countWords(textArea.value));
 }
 
 function applyChapterWordCount(){
