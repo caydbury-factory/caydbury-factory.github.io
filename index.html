@@ -870,23 +870,102 @@ button:disabled{opacity:.55;cursor:not-allowed;filter:saturate(.6)}
   <div class="modal-content">
     <h3>Author’s Update</h3>
 
-    <select id="realmInput"></select>
-    <select id="stageInput">
-      <option>Outline</option>
-      <option>Draft</option>
-      <option>Revision</option>
-      <option>Finalizing</option>
-      <option>Editing</option>
-    </select>
-    <input type="number" id="stageNumberInput" placeholder="Stage Number">
-    <input type="number" id="wordsInput" placeholder="Words this session">
-    <select id="locationInput">
-      <option>Home</option>
-      <option>Cafe</option>
-      <option>Library</option>
-      <option>Office</option>
-      <option>Travel</option>
-    </select>
+    <div class="row">
+      <div class="field">
+        <label for="entryModeInput">Entry Type</label>
+        <select id="entryModeInput" onchange="toggleAuthorUpdateMode()">
+          <option value="session">Add Writing Session</option>
+          <option value="move">Move Words Between Chapters</option>
+          <option value="set">Set Chapter Total</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="authorSessionFields">
+      <div class="row">
+        <div class="field">
+          <label for="realmInput">Chapter</label>
+          <select id="realmInput"></select>
+        </div>
+
+        <div class="field">
+          <label for="stageInput">Stage</label>
+          <select id="stageInput">
+            <option>Outline</option>
+            <option>Draft</option>
+            <option>Revision</option>
+            <option>Finalizing</option>
+            <option>Editing</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="wordsInput">Words</label>
+          <input type="number" id="wordsInput" placeholder="Words this session">
+        </div>
+
+        <div class="field">
+          <label for="locationInput">Location</label>
+          <select id="locationInput">
+            <option>Home</option>
+            <option>Cafe</option>
+            <option>Library</option>
+            <option>Office</option>
+            <option>Travel</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="authorMoveFields" style="display:none;">
+      <div class="row">
+        <div class="field">
+          <label for="moveFromInput">Move From</label>
+          <select id="moveFromInput"></select>
+        </div>
+
+        <div class="field">
+          <label for="moveToInput">Move To</label>
+          <select id="moveToInput"></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="moveWordsInput">Words to Move</label>
+          <input type="number" id="moveWordsInput" placeholder="250">
+        </div>
+      </div>
+    </div>
+
+    <div id="authorSetFields" style="display:none;">
+      <div class="row">
+        <div class="field">
+          <label for="setRealmInput">Chapter</label>
+          <select id="setRealmInput"></select>
+        </div>
+
+        <div class="field">
+          <label for="setWordsInput">New Total</label>
+          <input type="number" id="setWordsInput" placeholder="12500">
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="entryDateInput">Date</label>
+        <input type="date" id="entryDateInput">
+      </div>
+
+      <div class="field">
+        <label for="entryTimeInput">Time</label>
+        <input type="time" id="entryTimeInput" step="60">
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button onclick="submitSession()">Update</button>
       <button class="cancel" onclick="closeModal()">Cancel</button>
@@ -1012,6 +1091,7 @@ if (mode === 'edit') {
 }
 
 let hasLocalMutations = false;
+let cloudRevision = 0;
 
 function isEditMode(){
   return document.body.classList.contains('edit-mode');
@@ -1048,6 +1128,7 @@ async function loadFromCloud() {
     if (typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
     if (Number.isFinite(data.dataVersion)) dataVersion = data.dataVersion;
     if (typeof data.baselineMigrated === "boolean") baselineMigrated = data.baselineMigrated;
+	if (Number.isFinite(data.cloudRevision)) cloudRevision = data.cloudRevision;
 	if (data.livePresence && typeof data.livePresence === "object") {
 	  livePresence = {
 		chapterIndex: Number.isInteger(data.livePresence.chapterIndex) ? data.livePresence.chapterIndex : null,
@@ -1063,6 +1144,7 @@ async function loadFromCloud() {
         v: MANUSCRIPT_DATA_VERSION,
         dataVersion,
         baselineMigrated,
+		cloudRevision,
         state,
         sessions,
         selectedIndex,
@@ -1120,7 +1202,7 @@ const carNames = [
   "Double Decker Car"
 ];
 
-let state = carNames.map(name=>({name,current:0,baselineCurrent:0,goal:3000,stage:"Outline"}));
+let state = carNames.map(name=>({name,current:0,baselineCurrent:0,goal:10000,stage:"Outline"}));
 let sessions = [];
 let selectedIndex=0;
 let dataVersion = MANUSCRIPT_DATA_VERSION;
@@ -1174,7 +1256,7 @@ function maybeMigrateLegacyTrackedWords(){
       name: carNames[i] || car.name || `Chapter ${i + 1}`,
       current,
       baselineCurrent: current,
-      goal: Number(car.goal) || 3000,
+      goal: 10000,
       stage: car.stage || "Outline"
     };
   });
@@ -1189,7 +1271,7 @@ function normalizeStateBaselineFields(){
     name: carNames[i] || car.name || `Chapter ${i + 1}`,
     current: Number(car.current) || 0,
     baselineCurrent: Number(car.baselineCurrent) || 0,
-    goal: Number(car.goal) || 3000,
+    goal: 10000,
     stage: car.stage || "Outline"
   }));
 
@@ -1336,13 +1418,48 @@ async function pollLivePresence() {
   }
 }
 
+async function pollCloudState(){
+  try {
+    const response = await fetch(SCRIPT_URL + "?t=" + Date.now(), {
+      method: "GET",
+      cache: "no-store"
+    });
+
+    const data = await response.json();
+    if (!data || typeof data !== "object") return;
+
+    const incomingRevision = Number.isFinite(data.cloudRevision) ? data.cloudRevision : 0;
+    const changed = incomingRevision !== cloudRevision;
+
+    if (changed) {
+      if (Array.isArray(data.state)) state = data.state;
+      if (Array.isArray(data.sessions)) sessions = data.sessions;
+      if (Number.isFinite(data.selectedIndex)) selectedIndex = data.selectedIndex;
+      if (Array.isArray(data.goals)) goals = data.goals;
+      if (Array.isArray(data.proItems)) proItems = data.proItems;
+      if (Array.isArray(data.activity)) activity = data.activity;
+      if (typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
+      if (data.livePresence && typeof data.livePresence === "object") livePresence = data.livePresence;
+      cloudRevision = incomingRevision;
+
+      normalizeStateBaselineFields();
+      refreshUI();
+      applyRemotePresenceToUI();
+    } else if (data.livePresence) {
+      livePresence = data.livePresence;
+      applyRemotePresenceToUI();
+    }
+  } catch (err) {
+    console.warn("[Cloud State Poll] Failed:", err);
+  }
+}
+
 function startPresencePolling() {
   if (presencePollInterval) clearInterval(presencePollInterval);
 
-  // public side needs polling most; author side can poll too without harm
   presencePollInterval = setInterval(() => {
-    pollLivePresence();
-  }, 2500);
+    pollCloudState();
+  }, 1500);
 }
 
 function setChapterCounterDisplay(words){
@@ -1609,45 +1726,132 @@ function renderCars(){
 }
 
 function openModal(){
-  const r=document.getElementById("realmInput");
-  r.innerHTML="";
-  state.forEach((c,i)=>{
-    const o=document.createElement("option");
-    o.value=i;o.textContent=c.name;
-    r.appendChild(o);
+  const selects = [
+    document.getElementById("realmInput"),
+    document.getElementById("moveFromInput"),
+    document.getElementById("moveToInput"),
+    document.getElementById("setRealmInput")
+  ];
+
+  selects.forEach(select => {
+    if(!select) return;
+    select.innerHTML = "";
+    state.forEach((c,i)=>{
+      const o=document.createElement("option");
+      o.value=i;
+      o.textContent=c.name;
+      select.appendChild(o);
+    });
   });
+
+  const now = new Date();
+  const dateEl = document.getElementById("entryDateInput");
+  const timeEl = document.getElementById("entryTimeInput");
+  const modeEl = document.getElementById("entryModeInput");
+
+  if(dateEl) dateEl.value = now.toISOString().slice(0,10);
+
+  if(timeEl){
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    timeEl.value = local.toISOString().slice(11,16);
+  }
+
+  if(modeEl) modeEl.value = "session";
+  toggleAuthorUpdateMode();
+
   document.getElementById("modal").style.display="flex";
 }
 function closeModal(){document.getElementById("modal").style.display="none";}
 
 function submitSession(){
-  const words=parseInt(document.getElementById("wordsInput").value);
-  const realm=parseInt(document.getElementById("realmInput").value);
-  const stage=document.getElementById("stageInput").value;
-  const location=document.getElementById("locationInput").value;
+  const mode = document.getElementById("entryModeInput")?.value || "session";
+  const timestamp = getEntryTimestamp();
 
-  if(!words) return;
+  if(mode === "session"){
+    const words = parseInt(document.getElementById("wordsInput").value, 10);
+    const realm = parseInt(document.getElementById("realmInput").value, 10);
+    const stage = document.getElementById("stageInput").value;
+    const location = document.getElementById("locationInput").value;
 
-  state[realm].current+=words;
-  state[realm].stage=stage;
+    if(!Number.isFinite(words) || words <= 0) return;
+    if(!Number.isInteger(realm) || realm < 0 || realm >= state.length) return;
 
-  sessions.push({
-    words,
-    stage,
-    location,
-    timestamp:new Date().toISOString()
-  });
+    state[realm].current += words;
+    state[realm].stage = stage;
+    selectedIndex = realm;
 
-  // Log it
-  addActivity({
-    type:"Session Update",
-    text:`+${words.toLocaleString()} words · ${stage} · ${location}`,
-    system:true
-  });
+    sessions.push({
+      words,
+      stage,
+      location,
+      timestamp,
+      chapterIndex: realm,
+      chapterName: state[realm].name
+    });
 
+    addActivity({
+      type:"Session Update",
+      text:`+${words.toLocaleString()} words · ${state[realm].name} · ${stage} · ${location}`,
+      system:true
+    });
+
+    justUpdatedChapterIndex = realm;
+    setLivePresence("updated", realm);
+  }
+
+  if(mode === "move"){
+    const fromIndex = parseInt(document.getElementById("moveFromInput").value, 10);
+    const toIndex = parseInt(document.getElementById("moveToInput").value, 10);
+    const moveWords = parseInt(document.getElementById("moveWordsInput").value, 10);
+
+    if(!Number.isFinite(moveWords) || moveWords <= 0) return;
+    if(fromIndex === toIndex) return;
+    if(!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
+    if(fromIndex < 0 || toIndex < 0 || fromIndex >= state.length || toIndex >= state.length) return;
+
+    const transferable = Math.min(moveWords, Math.max(0, Number(state[fromIndex].current) || 0));
+    if(transferable <= 0) return;
+
+    state[fromIndex].current -= transferable;
+    state[toIndex].current += transferable;
+    selectedIndex = toIndex;
+
+    addActivity({
+      type:"Correction",
+      text:`Moved ${transferable.toLocaleString()} words from ${state[fromIndex].name} to ${state[toIndex].name}`,
+      system:true
+    });
+
+    justUpdatedChapterIndex = toIndex;
+    setLivePresence("updated", toIndex);
+  }
+
+  if(mode === "set"){
+    const setIndex = parseInt(document.getElementById("setRealmInput").value, 10);
+    const newTotal = parseInt(document.getElementById("setWordsInput").value, 10);
+
+    if(!Number.isInteger(setIndex) || setIndex < 0 || setIndex >= state.length) return;
+    if(!Number.isFinite(newTotal) || newTotal < 0) return;
+
+    const oldTotal = Number(state[setIndex].current) || 0;
+    state[setIndex].current = newTotal;
+    selectedIndex = setIndex;
+
+    addActivity({
+      type:"Correction",
+      text:`Set ${state[setIndex].name} from ${oldTotal.toLocaleString()} to ${newTotal.toLocaleString()} words`,
+      system:true
+    });
+
+    justUpdatedChapterIndex = setIndex;
+    setLivePresence("updated", setIndex);
+  }
+
+  bumpCloudRevision();
   closeModal();
   renderCars();
   updateAnalytics();
+  renderGoals();
   persistAll();
 }
 
@@ -1943,6 +2147,34 @@ function escapeHtml(str){
     .replace(/>/g,"&gt;")
     .replace(/\"/g,"&quot;")
     .replace(/'/g,"&#039;");
+}
+
+function getEntryTimestamp(){
+  const dateEl = document.getElementById("entryDateInput");
+  const timeEl = document.getElementById("entryTimeInput");
+
+  const dateVal = dateEl ? dateEl.value : "";
+  const timeVal = timeEl ? timeEl.value : "";
+
+  if(dateVal && timeVal){
+    return new Date(`${dateVal}T${timeVal}:00`).toISOString();
+  }
+  if(dateVal){
+    return new Date(`${dateVal}T12:00:00`).toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function toggleAuthorUpdateMode(){
+  const mode = document.getElementById("entryModeInput")?.value || "session";
+
+  document.getElementById("authorSessionFields").style.display = mode === "session" ? "" : "none";
+  document.getElementById("authorMoveFields").style.display = mode === "move" ? "" : "none";
+  document.getElementById("authorSetFields").style.display = mode === "set" ? "" : "none";
+}
+
+function bumpCloudRevision(){
+  window.cloudRevision = (window.cloudRevision || 0) + 1;
 }
 
 function addActivity({type, text, system=false, manual=false}){
@@ -2571,6 +2803,7 @@ function persistAll(){
     v: MANUSCRIPT_DATA_VERSION,
     dataVersion,
     baselineMigrated,
+	cloudRevision,
     state,
     sessions,
     selectedIndex,
@@ -2618,7 +2851,7 @@ function resetEverything(){
   if (!ok) return;
 
   // Reset core manuscript data
-  state = carNames.map(name => ({ name, current: 0, baselineCurrent: 0, goal: 3000, stage: 'Outline' }));
+  state = carNames.map(name => ({ name, current: 0, baselineCurrent: 0, goal: 12000, stage: 'Outline' }));
   sessions = [];
   selectedIndex = 0;
   dataVersion = MANUSCRIPT_DATA_VERSION;
@@ -2672,6 +2905,7 @@ function loadAll(){
     if(typeof data.workspaceTab === "string") workspaceTab = data.workspaceTab;
     if(Number.isFinite(data.dataVersion)) dataVersion = data.dataVersion;
     if(typeof data.baselineMigrated === "boolean") baselineMigrated = data.baselineMigrated;
+	if(Number.isFinite(data.cloudRevision)) cloudRevision = data.cloudRevision;
     if(data.livePresence && typeof data.livePresence === "object") {
       livePresence = {
         chapterIndex: Number.isInteger(data.livePresence.chapterIndex) ? data.livePresence.chapterIndex : null,
